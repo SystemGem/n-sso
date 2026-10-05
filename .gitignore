@@ -1,0 +1,7 @@
+/vendor/
+/dist/
+/.e2e-site/
+node_modules/
+tests/e2e/test-results/
+tests/e2e/playwright-report/
+.phpunit.result.cache

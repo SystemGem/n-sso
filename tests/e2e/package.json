@@ -1,0 +1,11 @@
+{
+  "name": "nplus-sso-e2e",
+  "private": true,
+  "description": "End-to-end purchase -> N+ SSO journey tests (WordPress + WooCommerce + mock N+).",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1"
+  }
+}

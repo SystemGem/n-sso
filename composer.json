@@ -1,0 +1,19 @@
+{
+    "name": "systemgem/nplus-sso",
+    "description": "WordPress/WooCommerce plugin integrating the N+ Learning Platform (user provisioning, subscription assignment, SSO auto-login).",
+    "type": "wordpress-plugin",
+    "license": "GPL-2.0-or-later",
+    "require": {
+        "php": ">=7.4"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.6"
+    },
+    "scripts": {
+        "test": "phpunit",
+        "lint": "find . -name '*.php' -not -path './vendor/*' -not -path './.e2e-site/*' -not -path '*/node_modules/*' -print0 | xargs -0 -n1 php -l"
+    },
+    "config": {
+        "sort-packages": true
+    }
+}

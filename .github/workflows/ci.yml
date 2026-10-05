@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  unit:
+    name: Lint + unit tests (PHP ${{ matrix.php }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php: ['7.4', '8.1', '8.3']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+      - run: composer install --no-interaction --no-progress
+      - run: composer lint
+      - run: composer test
+
+  e2e:
+    name: End-to-end purchase -> N+ SSO journey
+    runs-on: ubuntu-latest
+    env:
+      WP_VERSION: '6.8.3'
+      WC_VERSION: '10.2.2'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite, sqlite3
+          coverage: none
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Download WordPress, WooCommerce, SQLite driver, WP-CLI
+        run: |
+          mkdir -p /tmp/deps && cd /tmp/deps
+          git clone -q --depth 1 --branch "$WP_VERSION" https://github.com/WordPress/WordPress wp
+          git clone -q --depth 1 https://github.com/WordPress/sqlite-database-integration sqlite
+          curl -sSL -o wc.zip "https://github.com/woocommerce/woocommerce/releases/download/$WC_VERSION/woocommerce.zip"
+          unzip -q wc.zip
+          curl -sSL -o wp-cli.phar https://github.com/wp-cli/wp-cli/releases/download/v2.12.0/wp-cli-2.12.0.phar
+      - name: Install Playwright
+        working-directory: tests/e2e
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Run end-to-end tests
+        env:
+          WP_SRC: /tmp/deps/wp
+          WC_SRC: /tmp/deps/woocommerce
+          SQLITE_SRC: /tmp/deps/sqlite/packages/plugin-sqlite-database-integration
+          WP_CLI: php -d memory_limit=1G /tmp/deps/wp-cli.phar
+        run: tests/e2e/run.sh
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-results
+          path: |
+            tests/e2e/test-results
+            .e2e-site/wp-content/debug.log
+            .e2e-site/nplus-mock-state.json
+
+  package:
+    name: Build installable zip
+    runs-on: ubuntu-latest
+    needs: [unit, e2e]
+    steps:
+      - uses: actions/checkout@v4
+      - run: bin/build-zip.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nplus-sso-plugin
+          path: dist/nplus-sso.zip
