@@ -360,6 +360,7 @@ class Api_Client {
 			'method'      => 'POST',
 			'timeout'     => max( 5, (int) $this->config['timeout'] ),
 			'redirection' => 0,
+			'user-agent'  => 'nplus-sso/' . ( defined( 'NPLUS_SSO_VERSION' ) ? NPLUS_SSO_VERSION : 'dev' ) . '; ' . ( function_exists( 'home_url' ) ? home_url() : '' ),
 			'headers'     => array(
 				'x-api-key'    => $this->config['api_key'],
 				'Content-Type' => 'application/x-www-form-urlencoded',
@@ -384,9 +385,26 @@ class Api_Client {
 		Logger::info( 'N+ response ' . $params['wsfunction'], array( 'code' => $code, 'body' => is_array( $data ) ? $data : substr( (string) $payload, 0, 500 ) ) );
 
 		if ( $code < 200 || $code >= 300 ) {
-			$message = is_array( $data ) && ! empty( $data['message'] ) ? $data['message'] : sprintf( 'HTTP %d', $code );
-			Logger::error( 'N+ HTTP error ' . $params['wsfunction'], array( 'code' => $code, 'message' => $message ) );
-			return new WP_Error( 'nplus_http_' . $code, $message, array( 'status' => $code, 'response' => $data ) );
+			// Keep what the server said: a bare status hides whether N+ or a firewall in front of it refused us.
+			$snippet = self::body_snippet( $payload );
+			$detail  = is_array( $data ) && ! empty( $data['message'] ) && is_string( $data['message'] ) ? $data['message'] : $snippet;
+			$message = sprintf( 'HTTP %d', $code ) . ( '' !== $detail ? ': ' . $detail : '' );
+			$headers = array();
+			foreach ( array( 'server', 'cf-ray', 'x-amzn-requestid', 'x-amzn-errortype', 'x-cache', 'www-authenticate', 'via' ) as $header ) {
+				$value = wp_remote_retrieve_header( $raw, $header );
+				if ( '' !== $value && null !== $value ) {
+					$headers[ $header ] = is_array( $value ) ? implode( ', ', $value ) : (string) $value;
+				}
+			}
+			Logger::error( 'N+ HTTP error ' . $params['wsfunction'], array( 'code' => $code, 'message' => $message, 'headers' => $headers ) );
+			return new WP_Error(
+				'nplus_http_' . $code,
+				$message,
+				array(
+					'status'   => $code,
+					'response' => is_array( $data ) ? $data : array( 'body' => $snippet, 'headers' => $headers ),
+				)
+			);
 		}
 
 		if ( ! is_array( $data ) ) {
@@ -422,6 +440,53 @@ class Api_Client {
 	 */
 	private static function loggable( array $body ) {
 		return Logger::redact( $body );
+	}
+
+	/**
+	 * Readable, short version of a (possibly HTML) response body.
+	 *
+	 * @param string $payload Body.
+	 * @return string
+	 */
+	public static function body_snippet( $payload ) {
+		$text = (string) $payload;
+		if ( preg_match( '#<title[^>]*>(.*?)</title>#is', $text, $m ) ) {
+			$title = trim( html_entity_decode( $m[1] ) );
+		}
+		$text = preg_replace( '#<(script|style)[^>]*>.*?</\\1>#is', ' ', $text );
+		$text = trim( preg_replace( '/\s+/', ' ', html_entity_decode( strip_tags( $text ) ) ) );
+		if ( ! empty( $title ) && 0 !== strpos( $text, $title ) ) {
+			$text = $title . ' - ' . $text;
+		}
+		return function_exists( 'mb_substr' ) ? mb_substr( $text, 0, 300 ) : substr( $text, 0, 300 );
+	}
+
+	/**
+	 * Masked fingerprint of the configured credentials, for diagnostics only.
+	 * Shows length and a few edge characters so a wrong or auto-filled value is
+	 * obvious without revealing the secret.
+	 *
+	 * @return array<string,string>
+	 */
+	public function diagnostics() {
+		$mask = static function ( $value, $show ) {
+			$value = (string) $value;
+			$len   = strlen( $value );
+			if ( 0 === $len ) {
+				return '(empty)';
+			}
+			$edge = $len > 8 ? $show : 1;
+			return substr( $value, 0, $edge ) . str_repeat( '•', 3 ) . substr( $value, -$edge ) . ' (' . $len . ' chars' . ( preg_match( '/\s/', $value ) ? ', contains spaces!' : '' ) . ')';
+		};
+		return array(
+			'endpoint'          => $this->config['base_url'] . self::ENDPOINT,
+			'x-api-key'         => $mask( $this->config['api_key'], 2 ),
+			'wstoken'           => $mask( $this->config['wstoken'], 4 ),
+			'secret'            => $mask( $this->config['secret'], 2 ),
+			'autologin_wstoken' => $this->config['autologin_wstoken'] === $this->config['wstoken'] ? 'same as wstoken' : $mask( $this->config['autologin_wstoken'], 4 ),
+			'functions'         => $this->config['fn_create_user'] . ', ' . $this->config['fn_create_order'] . ', ' . $this->config['fn_autologin'],
+			'signature'         => $this->config['signature_format'] . ' / auto login: ' . $this->config['autologin_signature'] . ' / mode: ' . $this->config['autologin_mode'],
+		);
 	}
 
 	/**

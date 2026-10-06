@@ -4,7 +4,7 @@ Tags: woocommerce, sso, lms, moodle, learning
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.1.0
+Stable tag: 1.1.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -27,6 +27,10 @@ Background processing with automatic retries, an order meta box, order notes, re
 3. Edit a product > Product data > N+ Learning: tick "Grant N+ access" and enter the N+ Campaign ID and Subscription SKU.
 
 == Changelog ==
+
+= 1.1.1 =
+* Connection test and logs now show the full N+ error reply (e.g. firewall pages on HTTP 403) and masked credential fingerprints.
+* Identify requests with a plugin User-Agent.
 
 = 1.1.0 =
 * Follow the N+ staging API contract: configurable function names, timestamp-only signatures, signed Assign Subscription, Auto Login web service with its own token.

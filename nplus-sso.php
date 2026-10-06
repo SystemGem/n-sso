@@ -3,7 +3,7 @@
  * Plugin Name:       N+ SSO Integration
  * Plugin URI:        https://github.com/SystemGem/n-sso
  * Description:       Provisions learners on the N+ Learning Platform when they buy a mapped WooCommerce product, assigns their N+ subscription and gives them one-click Single Sign-On into N+.
- * Version:           1.1.0
+ * Version:           1.1.1
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            SystemGem
@@ -19,7 +19,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'NPLUS_SSO_VERSION', '1.1.0' );
+define( 'NPLUS_SSO_VERSION', '1.1.1' );
 define( 'NPLUS_SSO_FILE', __FILE__ );
 define( 'NPLUS_SSO_DIR', plugin_dir_path( __FILE__ ) );
 define( 'NPLUS_SSO_URL', plugin_dir_url( __FILE__ ) );

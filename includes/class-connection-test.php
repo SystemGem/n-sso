@@ -49,7 +49,7 @@ class Connection_Test {
 				</tr>
 				<tr>
 					<th scope="row"><label for="nplus_test_campaign"><?php esc_html_e( 'Campaign ID', 'nplus-sso' ); ?></label></th>
-					<td><input type="number" id="nplus_test_campaign" name="campaign" min="0" value="" placeholder="889904" />
+					<td><input type="number" id="nplus_test_campaign" name="campaign" min="0" value="" placeholder="e.g. 889904" />
 						<p class="description"><?php esc_html_e( 'Leave empty to only test Create User and Auto Login.', 'nplus-sso' ); ?></p></td>
 				</tr>
 				<tr>
@@ -121,7 +121,12 @@ class Connection_Test {
 			$result['steps'][] = self::step( __( 'Configuration', 'nplus-sso' ), false, 'Missing: ' . implode( ', ', $missing ) );
 			return $result;
 		}
-		$result['steps'][] = self::step( __( 'Configuration', 'nplus-sso' ), true, Settings::base_url() );
+		$diag = array();
+		foreach ( $client->diagnostics() as $key => $value ) {
+			$diag[] = $key . ': ' . $value;
+		}
+		$diag[]            = 'server time: ' . gmdate( 'Y-m-d H:i:s' ) . ' UTC (timestamp ' . time() . ')';
+		$result['steps'][] = self::step( __( 'Configuration', 'nplus-sso' ), true, implode( "\n", $diag ) );
 
 		$user = $client->create_user(
 			array(
@@ -176,7 +181,10 @@ class Connection_Test {
 	private static function step( $label, $ok, $detail ) {
 		if ( is_wp_error( $detail ) ) {
 			$data   = $detail->get_error_data();
-			$detail = $detail->get_error_message() . ( is_array( $data ) && isset( $data['response'] ) ? "\n" . wp_json_encode( Logger::redact( (array) $data['response'] ) ) : '' );
+			$detail = $detail->get_error_message() . ( is_array( $data ) && ! empty( $data['response'] ) ? "\n" . wp_json_encode( Logger::redact( (array) $data['response'] ), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) : '' );
+			if ( is_array( $data ) && isset( $data['status'] ) && in_array( (int) $data['status'], array( 401, 403 ), true ) ) {
+				$detail .= "\n\n" . __( 'N+ (or a firewall in front of it) refused the request before checking the data. Check that the API key above matches "Api key" from N+ exactly (browsers sometimes auto-fill a saved password into these fields), and ask N+ whether your server IP must be allow-listed.', 'nplus-sso' );
+			}
 		} elseif ( is_array( $detail ) ) {
 			$detail = wp_json_encode( Logger::redact( $detail ) );
 		}

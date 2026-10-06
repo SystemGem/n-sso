@@ -50,6 +50,7 @@ function wp_remote_post( $url, $args ) {
 }
 function wp_remote_retrieve_response_code( $r ) { return is_array( $r ) ? $r['response']['code'] : ''; }
 function wp_remote_retrieve_body( $r ) { return is_array( $r ) ? $r['body'] : ''; }
+function wp_remote_retrieve_header( $r, $h ) { return is_array( $r ) && isset( $r['headers'][ $h ] ) ? $r['headers'][ $h ] : ''; }
 function error_log_capture( $line ) { $GLOBALS['nplus_test_logs'][] = $line; }
 function wc_get_logger() {
 	return new class() {

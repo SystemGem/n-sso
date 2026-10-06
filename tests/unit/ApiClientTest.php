@@ -197,6 +197,34 @@ class ApiClientTest extends TestCase {
 		$this->assertSame( 'nplus_invalid_json', $this->client()->create_user( array( 'email' => 'a@b.co' ), 1 )->get_error_code() );
 	}
 
+	public function test_http_403_keeps_server_explanation() {
+		$GLOBALS['nplus_test_http'] = static function () {
+			return array(
+				'response' => array( 'code' => 403 ),
+				'headers'  => array( 'server' => 'cloudflare', 'cf-ray' => 'abc123' ),
+				'body'     => '<html><head><title>Attention Required!</title><style>x{}</style></head><body><h1>Sorry, you have been blocked</h1></body></html>',
+			);
+		};
+		$err = $this->client()->create_user( array( 'email' => 'a@b.co' ), 1 );
+		$this->assertSame( 'nplus_http_403', $err->get_error_code() );
+		$this->assertStringContainsString( 'HTTP 403: Attention Required!', $err->get_error_message() );
+		$this->assertStringContainsString( 'Sorry, you have been blocked', $err->get_error_message() );
+		$this->assertStringNotContainsString( 'x{}', $err->get_error_message() );
+		$this->assertSame( 'cloudflare', $err->get_error_data()['response']['headers']['server'] );
+
+		$this->respond( 403, array( 'status' => 'error', 'message' => 'Invalid API key' ) );
+		$this->assertSame( 'HTTP 403: Invalid API key', $this->client()->create_user( array( 'email' => 'a@b.co' ), 1 )->get_error_message() );
+	}
+
+	public function test_diagnostics_mask_credentials() {
+		$d = $this->client( array( 'api_key' => 'Nzc=', 'wstoken' => str_repeat( 'f', 28 ) . '6c1', 'secret' => 'P9' . str_repeat( 'x', 54 ) . 'Xw' ) )->diagnostics();
+		$this->assertSame( 'N•••= (4 chars)', $d['x-api-key'] );
+		$this->assertStringNotContainsString( str_repeat( 'x', 10 ), $d['secret'] );
+		$this->assertStringContainsString( '(58 chars)', $d['secret'] );
+		$this->assertSame( 'same as wstoken', $d['autologin_wstoken'] );
+		$this->assertStringContainsString( 'contains spaces', $this->client( array( 'api_key' => 'Nzc= ' ) )->diagnostics()['x-api-key'] );
+	}
+
 	public function test_transport_error() {
 		$GLOBALS['nplus_test_http'] = static function () {
 			return new WP_Error( 'http_request_failed', 'cURL error 28: timed out' );
