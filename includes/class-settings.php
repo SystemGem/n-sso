@@ -358,7 +358,7 @@ class Settings {
 					$secret_labels = array(
 						'api_key'          => array( __( 'API key (x-api-key)', 'nplus-sso' ), '' ),
 						'wstoken'          => array( __( 'Web service token (wstoken)', 'nplus-sso' ), '' ),
-						'secret'           => array( __( 'HMAC secret', 'nplus-sso' ), __( 'Used to sign Create User requests (email:timestamp).', 'nplus-sso' ) ),
+						'secret'           => array( __( 'HMAC secret', 'nplus-sso' ), __( 'The "SSO API Secret Key" from N+. Used to sign the N+ requests (see the signature settings below).', 'nplus-sso' ) ),
 						'autologin_secret' => array( __( 'Auto Login HMAC secret (optional)', 'nplus-sso' ), __( 'Only if N+ issued a different secret for Auto Login. Leave empty to reuse the HMAC secret.', 'nplus-sso' ) ),
 						'autologin_wstoken' => array( __( 'Auto Login web service token (optional)', 'nplus-sso' ), __( 'Only if N+ issued a separate wstoken for the Auto Login web service. Leave empty to reuse the web service token.', 'nplus-sso' ) ),
 					);
