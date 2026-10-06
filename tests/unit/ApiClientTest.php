@@ -84,10 +84,31 @@ class ApiClientTest extends TestCase {
 		$this->assertSame( '1749360000', $p['timestamp'] );
 		$this->assertSame( 'v1', $p['version'] );
 		$this->assertSame( '5', $p['roleid'] );
-		$this->assertSame( hash_hmac( 'sha256', 'test@test.com:1749360000', 'SECRET123' ), $p['signature'] );
+		// N+ staging signs the timestamp only (verified against the signed samples N+ sent).
+		$this->assertSame( hash_hmac( 'sha256', '1749360000', 'SECRET123' ), $p['signature'] );
 		foreach ( array( 'firstname', 'lastname', 'phone1', 'country', 'address', 'phone_country_code', 'company_name', 'partner_additional_info', 'partner_userid' ) as $field ) {
 			$this->assertArrayHasKey( $field, $p, "missing $field" );
 		}
+	}
+
+	public function test_create_user_prefixed_signature_per_pdf() {
+		$this->respond( 200, array( 'status' => 'success', 'data' => array( 'id' => 1 ) ) );
+		$this->client( array( 'signature_format' => 'prefixed' ) )->create_user( array( 'email' => 'a@b.co' ), 99 );
+		$this->assertSame( hash_hmac( 'sha256', 'a@b.co:99', 'SECRET123' ), $this->last_request()['parsed']['signature'] );
+	}
+
+	public function test_function_names_come_from_config() {
+		$this->respond( 200, array( 'status' => 'success', 'data' => array( 'id' => 1 ), 'orderid' => 2 ) );
+		$client = $this->client(
+			array(
+				'fn_create_user'  => 'local_lms_apis_clone_create_user_site',
+				'fn_create_order' => 'local_lms_apis_clone_create_order',
+			)
+		);
+		$client->create_user( array( 'email' => 'a@b.co' ), 1 );
+		$this->assertSame( 'local_lms_apis_clone_create_user_site', $this->last_request()['parsed']['wsfunction'] );
+		$client->create_order( array( 'website_orderid' => 'x', 'campaignid' => 1, 'userid' => 2 ), 1 );
+		$this->assertSame( 'local_lms_apis_clone_create_order', $this->last_request()['parsed']['wsfunction'] );
 	}
 
 	public function test_create_user_rejects_invalid_email_without_calling_api() {
@@ -128,7 +149,8 @@ class ApiClientTest extends TestCase {
 				'subscription_skuid'     => 'NPLUS-SKU',
 				'subscription_startdate' => '2026-10-05 10:00:00',
 				'sendmail'               => 1,
-			)
+			),
+			1791315010
 		);
 
 		$this->assertSame( 75606, $result['orderid'] );
@@ -144,6 +166,8 @@ class ApiClientTest extends TestCase {
 		$this->assertSame( 'NPLUS-SKU', $p['subscription_skuid'] );
 		$this->assertSame( '2026-10-05 10:00:00', $p['subscription_startdate'] );
 		$this->assertSame( '1', $p['sendmail'] );
+		$this->assertSame( '1791315010', $p['timestamp'] );
+		$this->assertSame( hash_hmac( 'sha256', '1791315010', 'SECRET123' ), $p['signature'] );
 	}
 
 	public function test_create_order_requires_ids() {
@@ -192,6 +216,52 @@ class ApiClientTest extends TestCase {
 		$this->assertSame( 'https://learn.nplus.global/auto-login/?uid=81288&timestamp=1749360000&signature=' . $sig, $url );
 	}
 
+	public function test_auto_login_web_service() {
+		$this->respond( 200, array( 'status' => 'success', 'data' => array( 'loginurl' => 'https://stage.nplus.global/sso?token=abc' ) ) );
+		$client = $this->client( array( 'base_url' => 'https://stagelms.nplus.global', 'autologin_wstoken' => 'ALTOKEN' ) );
+		$url    = $client->auto_login( 230428, 1769693436 );
+
+		$this->assertSame( 'https://stage.nplus.global/sso?token=abc', $url );
+		$req = $this->last_request();
+		$this->assertSame( 'https://stagelms.nplus.global/webservice/rest/server.php', $req['url'] );
+		$this->assertSame( 'KEY123', $req['args']['headers']['x-api-key'] );
+		$p = $req['parsed'];
+		$this->assertSame( 'local_react_lms_apis_sso_autologin', $p['wsfunction'] );
+		$this->assertSame( 'ALTOKEN', $p['wstoken'], 'Auto Login has its own wstoken' );
+		$this->assertSame( 'json', $p['moodlewsrestformat'] );
+		$this->assertSame( '230428', $p['uid'] );
+		$this->assertSame( '1769693436', $p['timestamp'] );
+		$this->assertSame( hash_hmac( 'sha256', '230428:1769693436', 'SECRET123' ), $p['signature'] );
+	}
+
+	public function test_auto_login_web_service_falls_back_to_main_token_and_accepts_plain_url() {
+		$this->respond( 200, array( 'url' => 'https://learn.nplus.global/x' ) );
+		$this->assertSame( 'https://learn.nplus.global/x', $this->client()->auto_login( 1, 1 ) );
+		$this->assertSame( 'TOKEN123', $this->last_request()['parsed']['wstoken'] );
+	}
+
+	public function test_auto_login_rejects_foreign_or_missing_urls() {
+		$this->respond( 200, array( 'status' => 'success', 'loginurl' => 'https://evil.example.com/phish' ) );
+		$this->assertSame( 'nplus_no_login_url', $this->client()->auto_login( 1, 1 )->get_error_code() );
+
+		$this->respond( 200, array( 'status' => 'success', 'loginurl' => 'https://nplus.global.evil.com/' ) );
+		$this->assertSame( 'nplus_no_login_url', $this->client()->auto_login( 1, 1 )->get_error_code() );
+
+		$this->respond( 200, array( 'status' => 'success', 'loginurl' => 'http://learn.nplus.global/insecure' ) );
+		$this->assertSame( 'nplus_no_login_url', $this->client()->auto_login( 1, 1 )->get_error_code() );
+
+		$this->respond( 200, array( 'status' => 'error', 'message' => 'Invalid signature' ) );
+		$this->assertSame( 'Invalid signature', $this->client()->auto_login( 1, 1 )->get_error_message() );
+	}
+
+	public function test_auto_login_redirect_mode_per_pdf() {
+		$GLOBALS['nplus_test_http'] = function () {
+			$this->fail( 'redirect mode must not call the API' );
+		};
+		$url = $this->client( array( 'autologin_mode' => 'redirect' ) )->auto_login( 81288, 1749360000 );
+		$this->assertStringStartsWith( 'https://learn.nplus.global/auto-login/?uid=81288&timestamp=1749360000&signature=', $url );
+	}
+
 	public function test_auto_login_uses_dedicated_secret_when_set() {
 		$url = $this->client( array( 'autologin_secret' => 'OTHER' ) )->auto_login_url( 5, 10 );
 		$this->assertStringEndsWith( 'signature=' . hash_hmac( 'sha256', '5:10', 'OTHER' ), $url );
@@ -207,7 +277,7 @@ class ApiClientTest extends TestCase {
 		$all = implode( "\n", $GLOBALS['nplus_test_logs'] );
 		$this->assertStringNotContainsString( 'TOKEN123', $all );
 		$this->assertStringNotContainsString( 'SECRET123', $all );
-		$this->assertStringNotContainsString( hash_hmac( 'sha256', 'a@b.co:1', 'SECRET123' ), $all );
+		$this->assertStringNotContainsString( hash_hmac( 'sha256', '1', 'SECRET123' ), $all );
 	}
 
 	public function test_format_decimal() {

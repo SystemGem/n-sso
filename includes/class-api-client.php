@@ -2,9 +2,15 @@
 /**
  * HTTP client for the N+ Learning Platform APIs.
  *
- *  - Create User API                  POST /webservice/rest/server.php  wsfunction=local_lms_create_user_site
- *  - N+ Subscription Assignment API   POST /webservice/rest/server.php  wsfunction=local_lms_create_order
- *  - Auto Login API                   GET  /auto-login/?uid=&timestamp=&signature=
+ *  - Create User API                  POST /webservice/rest/server.php  wsfunction=<fn_create_user>
+ *  - N+ Subscription Assignment API   POST /webservice/rest/server.php  wsfunction=<fn_create_order>
+ *  - Auto Login, one of:
+ *      "ws"       POST /webservice/rest/server.php  wsfunction=<fn_autologin> -> JSON with a login URL
+ *                 (what N+ sent with the staging credentials)
+ *      "redirect" GET  /auto-login/?uid=&timestamp=&signature=  (what the PDF documentation describes)
+ *
+ * Function names differ between environments (staging uses local_lms_apis_clone_*),
+ * so they come from settings.
  *
  * @package NPlusSSO
  */
@@ -24,6 +30,10 @@ class Api_Client {
 	const AUTO_LOGIN_PATH = '/auto-login/';
 	const FN_CREATE_USER  = 'local_lms_create_user_site';
 	const FN_CREATE_ORDER = 'local_lms_create_order';
+	const FN_AUTOLOGIN    = 'local_react_lms_apis_sso_autologin';
+
+	const AUTOLOGIN_WS       = 'ws';
+	const AUTOLOGIN_REDIRECT = 'redirect';
 
 	/**
 	 * Configuration.
@@ -38,18 +48,54 @@ class Api_Client {
 	 * @param array<string,mixed>|null $config Optional explicit config (defaults to plugin settings).
 	 */
 	public function __construct( $config = null ) {
-		$this->config = is_array( $config ) ? $config : array(
-			'base_url'         => Settings::base_url(),
-			'api_key'          => (string) Settings::get( 'api_key' ),
-			'wstoken'          => (string) Settings::get( 'wstoken' ),
-			'secret'           => (string) Settings::get( 'secret' ),
-			'autologin_secret' => Settings::autologin_secret(),
-			'version'          => (string) Settings::get( 'api_version' ),
-			'timeout'          => (int) Settings::get( 'request_timeout' ),
+		if ( ! is_array( $config ) ) {
+			$config = array(
+				'base_url'            => Settings::base_url(),
+				'api_key'             => (string) Settings::get( 'api_key' ),
+				'wstoken'             => (string) Settings::get( 'wstoken' ),
+				'autologin_wstoken'   => (string) Settings::get( 'autologin_wstoken' ),
+				'secret'              => (string) Settings::get( 'secret' ),
+				'autologin_secret'    => Settings::autologin_secret(),
+				'version'             => (string) Settings::get( 'api_version' ),
+				'timeout'             => (int) Settings::get( 'request_timeout' ),
+				'fn_create_user'      => (string) Settings::get( 'fn_create_user' ),
+				'fn_create_order'     => (string) Settings::get( 'fn_create_order' ),
+				'fn_autologin'        => (string) Settings::get( 'fn_autologin' ),
+				'signature_format'    => (string) Settings::get( 'signature_format' ),
+				'autologin_signature' => (string) Settings::get( 'autologin_signature' ),
+				'autologin_mode'      => (string) Settings::get( 'autologin_mode' ),
+			);
+		}
+		$this->config = array_merge(
+			array(
+				'base_url'            => '',
+				'api_key'             => '',
+				'wstoken'             => '',
+				'autologin_wstoken'   => '',
+				'secret'              => '',
+				'autologin_secret'    => '',
+				'version'             => 'v1',
+				'timeout'             => 20,
+				'fn_create_user'      => self::FN_CREATE_USER,
+				'fn_create_order'     => self::FN_CREATE_ORDER,
+				'fn_autologin'        => self::FN_AUTOLOGIN,
+				'signature_format'    => Signer::FORMAT_TIMESTAMP,
+				'autologin_signature' => Signer::FORMAT_PREFIXED,
+				'autologin_mode'      => self::AUTOLOGIN_WS,
+			),
+			array_filter(
+				$config,
+				static function ( $value ) {
+					return '' !== $value && null !== $value;
+				}
+			)
 		);
 		$this->config['base_url'] = untrailingslashit( (string) $this->config['base_url'] );
-		if ( empty( $this->config['autologin_secret'] ) ) {
+		if ( '' === (string) $this->config['autologin_secret'] ) {
 			$this->config['autologin_secret'] = $this->config['secret'];
+		}
+		if ( '' === (string) $this->config['autologin_wstoken'] ) {
+			$this->config['autologin_wstoken'] = $this->config['wstoken'];
 		}
 	}
 
@@ -73,13 +119,13 @@ class Api_Client {
 		}
 
 		$params = array(
-			'wsfunction'              => self::FN_CREATE_USER,
+			'wsfunction'              => $this->config['fn_create_user'],
 			'firstname'               => (string) ( $user['firstname'] ?? '' ),
 			'lastname'                => (string) ( $user['lastname'] ?? '' ),
 			'email'                   => $email,
 			'phone1'                  => (string) ( $user['phone1'] ?? '' ),
 			'roleid'                  => (int) ( $user['roleid'] ?? 5 ),
-			'signature'               => Signer::create_user( $email, $timestamp, $this->config['secret'] ),
+			'signature'               => Signer::create_user( $email, $timestamp, $this->config['secret'], $this->config['signature_format'] ),
 			'timestamp'               => $timestamp,
 			'version'                 => (string) $this->config['version'],
 			'country'                 => (string) ( $user['country'] ?? '' ),
@@ -108,9 +154,12 @@ class Api_Client {
 	 * @param array<string,mixed> $order Keys: website_orderid, campaignid, userid, quantity, payment,
 	 *                                   payment_currency, payment_status, source, subscription_skuid,
 	 *                                   subscription_startdate, sendmail.
+	 * @param int|null            $timestamp Unix timestamp (injectable for tests).
 	 * @return array|WP_Error Decoded response; $response['orderid'] is the N+ order ID.
 	 */
-	public function create_order( array $order ) {
+	public function create_order( array $order, $timestamp = null ) {
+		$timestamp = null === $timestamp ? time() : (int) $timestamp;
+
 		foreach ( array( 'website_orderid', 'campaignid', 'userid' ) as $required ) {
 			if ( empty( $order[ $required ] ) ) {
 				/* translators: %s: parameter name */
@@ -119,7 +168,7 @@ class Api_Client {
 		}
 
 		$params = array(
-			'wsfunction'             => self::FN_CREATE_ORDER,
+			'wsfunction'             => $this->config['fn_create_order'],
 			'website_orderid'        => (string) $order['website_orderid'],
 			'campaignid'             => (int) $order['campaignid'],
 			'userid'                 => (int) $order['userid'],
@@ -131,9 +180,122 @@ class Api_Client {
 			'subscription_skuid'     => (string) ( $order['subscription_skuid'] ?? '' ),
 			'subscription_startdate' => (string) ( $order['subscription_startdate'] ?? '' ),
 			'sendmail'               => empty( $order['sendmail'] ) ? 0 : 1,
+			'signature'              => Signer::create_order( $timestamp, $this->config['secret'] ),
+			'timestamp'              => $timestamp,
 		);
 
 		return $this->call( $params );
+	}
+
+	/**
+	 * Get the URL that signs the learner in to N+. Call it at click time: N+ validates the timestamp.
+	 *
+	 * @param int      $nplus_user_id N+ user ID.
+	 * @param int|null $timestamp     Unix timestamp (injectable for tests).
+	 * @return string|WP_Error
+	 */
+	public function auto_login( $nplus_user_id, $timestamp = null ) {
+		if ( self::AUTOLOGIN_REDIRECT === $this->config['autologin_mode'] ) {
+			return $this->auto_login_url( $nplus_user_id, $timestamp );
+		}
+
+		$timestamp = null === $timestamp ? time() : (int) $timestamp;
+		$uid       = (int) $nplus_user_id;
+		$response  = $this->call(
+			array(
+				'wsfunction' => $this->config['fn_autologin'],
+				'uid'        => $uid,
+				'timestamp'  => $timestamp,
+				'signature'  => Signer::auto_login( $uid, $timestamp, $this->config['autologin_secret'], $this->config['autologin_signature'] ),
+			),
+			$this->config['autologin_wstoken'],
+			false
+		);
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+
+		$url = $this->find_login_url( $response );
+		if ( ! $url ) {
+			Logger::error( 'N+ auto login returned no usable URL', $response );
+			$message = isset( $response['message'] ) && is_string( $response['message'] ) ? $response['message'] : __( 'N+ did not return a login link.', 'nplus-sso' );
+			return new WP_Error( 'nplus_no_login_url', $message, array( 'response' => $response ) );
+		}
+		return $url;
+	}
+
+	/**
+	 * Find the login URL in an Auto Login web service response.
+	 *
+	 * The response shape is not documented yet, so well-known keys are tried first
+	 * (also inside "data"), then any URL value. Only URLs on the N+ domain are accepted,
+	 * so a response can never send the learner to a third-party site.
+	 *
+	 * @param array $response Decoded response.
+	 * @return string Empty string when none found.
+	 */
+	public function find_login_url( array $response ) {
+		$keys       = array( 'loginurl', 'login_url', 'autologin_url', 'autologinurl', 'redirect_url', 'redirecturl', 'url', 'link' );
+		$candidates = array();
+		foreach ( array( $response, isset( $response['data'] ) && is_array( $response['data'] ) ? $response['data'] : array() ) as $level ) {
+			foreach ( $keys as $key ) {
+				if ( isset( $level[ $key ] ) && is_string( $level[ $key ] ) ) {
+					$candidates[] = $level[ $key ];
+				}
+			}
+		}
+		array_walk_recursive(
+			$response,
+			static function ( $value ) use ( &$candidates ) {
+				if ( is_string( $value ) && preg_match( '#^https?://#i', $value ) ) {
+					$candidates[] = $value;
+				}
+			}
+		);
+		if ( isset( $response['data'] ) && is_string( $response['data'] ) ) {
+			$candidates[] = $response['data'];
+		}
+
+		foreach ( $candidates as $candidate ) {
+			$candidate = trim( $candidate );
+			if ( $this->is_nplus_url( $candidate ) ) {
+				return $candidate;
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * Whether a URL points at the N+ platform (same host as the API, or a sibling
+	 * host on the same domain, e.g. stagelms.nplus.global -> stage.nplus.global).
+	 *
+	 * @param string $url URL.
+	 * @return bool
+	 */
+	public function is_nplus_url( $url ) {
+		$host   = strtolower( (string) wp_parse_url( $url, PHP_URL_HOST ) );
+		$scheme = strtolower( (string) wp_parse_url( $url, PHP_URL_SCHEME ) );
+		if ( '' === $host || ! in_array( $scheme, array( 'https', 'http' ), true ) ) {
+			return false;
+		}
+		if ( 'http' === $scheme && 0 === strpos( $this->config['base_url'], 'https://' ) ) {
+			return false;
+		}
+		$base = strtolower( $this->host() );
+		if ( $host === $base ) {
+			return true;
+		}
+		$labels = explode( '.', $base );
+		$domain = count( $labels ) > 2 ? implode( '.', array_slice( $labels, 1 ) ) : $base;
+		$ok     = substr( $host, -strlen( '.' . $domain ) ) === '.' . $domain || $host === $domain;
+
+		/**
+		 * Filter whether a login URL host is trusted as an N+ host.
+		 *
+		 * @param bool   $ok   Trusted.
+		 * @param string $host Host of the URL.
+		 */
+		return (bool) apply_filters( 'nplus_sso_is_nplus_host', $ok, $host );
 	}
 
 	/**
@@ -151,7 +313,7 @@ class Api_Client {
 			array(
 				'uid'       => $uid,
 				'timestamp' => $timestamp,
-				'signature' => Signer::auto_login( $uid, $timestamp, $this->config['autologin_secret'] ),
+				'signature' => Signer::auto_login( $uid, $timestamp, $this->config['autologin_secret'], $this->config['autologin_signature'] ),
 			),
 			'',
 			'&',
@@ -171,11 +333,14 @@ class Api_Client {
 	/**
 	 * POST to the Moodle web service endpoint and normalise errors.
 	 *
-	 * @param array<string,mixed> $params Function specific params.
+	 * @param array<string,mixed> $params          Function specific params.
+	 * @param string|null         $wstoken         Token override (Auto Login has its own token).
+	 * @param bool                $require_success Require "status": "success" in the response.
 	 * @return array|WP_Error
 	 */
-	private function call( array $params ) {
-		if ( '' === $this->config['base_url'] || '' === $this->config['wstoken'] || '' === $this->config['api_key'] ) {
+	private function call( array $params, $wstoken = null, $require_success = true ) {
+		$wstoken = null === $wstoken ? $this->config['wstoken'] : $wstoken;
+		if ( '' === $this->config['base_url'] || '' === (string) $wstoken || '' === $this->config['api_key'] ) {
 			return new WP_Error( 'nplus_not_configured', __( 'N+ API credentials are not configured.', 'nplus-sso' ) );
 		}
 		if ( 0 !== strpos( $this->config['base_url'], 'https://' ) && ! apply_filters( 'nplus_sso_allow_insecure_http', false ) ) {
@@ -184,7 +349,7 @@ class Api_Client {
 
 		$body = array_merge(
 			array(
-				'wstoken'            => $this->config['wstoken'],
+				'wstoken'            => $wstoken,
 				'moodlewsrestformat' => 'json',
 			),
 			$params
@@ -236,7 +401,11 @@ class Api_Client {
 			return new WP_Error( 'nplus_ws_' . sanitize_key( $data['errorcode'] ?? 'exception' ), $message, array( 'response' => $data ) );
 		}
 
-		if ( ! isset( $data['status'] ) || 'success' !== strtolower( (string) $data['status'] ) ) {
+		$status = isset( $data['status'] ) ? $data['status'] : null;
+		$failed = true === $require_success
+			? ! ( true === $status || 'success' === strtolower( (string) $status ) )
+			: ( false === $status || in_array( strtolower( (string) $status ), array( 'error', 'failed', 'failure', 'fail' ), true ) );
+		if ( $failed ) {
 			$message = $data['message'] ?? __( 'N+ reported a failure.', 'nplus-sso' );
 			Logger::error( 'N+ API failure ' . $params['wsfunction'], $data );
 			return new WP_Error( 'nplus_api_failure', $message, array( 'response' => $data ) );

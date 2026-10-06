@@ -10,6 +10,13 @@ class SignerTest extends TestCase {
 		$this->assertSame( $expected, Signer::create_user( 'test@test.com', 1749360000, 's3cret' ) );
 	}
 
+	public function test_timestamp_only_format_used_by_nplus_staging() {
+		$expected = hash_hmac( 'sha256', '1791314792', 's3cret' );
+		$this->assertSame( $expected, Signer::create_user( 'x@y.z', 1791314792, 's3cret', Signer::FORMAT_TIMESTAMP ) );
+		$this->assertSame( $expected, Signer::create_order( 1791314792, 's3cret' ) );
+		$this->assertSame( $expected, Signer::auto_login( 5, 1791314792, 's3cret', Signer::FORMAT_TIMESTAMP ) );
+	}
+
 	public function test_auto_login_signature_matches_documented_algorithm() {
 		// N+ docs §6: hash_hmac('sha256', $userid . ':' . $timestamp, $secret).
 		$expected = hash_hmac( 'sha256', '81288:1749360000', 's3cret' );

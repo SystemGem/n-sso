@@ -60,12 +60,13 @@ test( 'registered learner buys the N+ programme and lands in N+ with one click',
 	await expect( box ).toContainText( 'Start learning on N+' );
 	const launch = box.locator( 'a.nplus-sso-launch' );
 	await expect( launch ).toHaveAttribute( 'href', /nplus-sso=launch/ );
-	// The page must never contain a signature: it is generated at click time.
+	// The page must never contain a signature or N+ login link: they are generated at click time.
 	expect( await page.content() ).not.toContain( 'signature=' );
+	expect( await page.content() ).not.toContain( 'auto-login' );
 
 	const [ nplus ] = await Promise.all( [ context.waitForEvent( 'page' ), launch.click() ] );
 	await nplus.waitForLoadState();
-	expect( nplus.url() ).toContain( env.mockUrl + '/auto-login/?uid=' );
+	expect( nplus.url() ).toContain( env.mockUrl + '/auto-login/session?token=' );
 	await expect( nplus.locator( '#nplus-welcome' ) ).toHaveText( 'Welcome to N+, Asha Rao' );
 	await expect( nplus.locator( '#nplus-subscriptions' ) ).toContainText( 'Campaign 12345 / NPLUS-CYBER-12M' );
 
@@ -150,4 +151,31 @@ test( 'a normal product does not touch N+', async ( { page, request } ) => {
 	// Allow background jobs a moment, then confirm N+ was never called.
 	await page.waitForTimeout( 2000 );
 	expect( ( await mockState( request ) ).requests.length ).toBe( before );
+} );
+
+test( 'admin "Test N+ connection" runs all three N+ calls and opens N+', async ( { page, context } ) => {
+	await page.goto( '/wp-login.php' );
+	await page.fill( '#user_login', 'admin' );
+	await page.fill( '#user_pass', 'admin' );
+	await page.click( '#wp-submit' );
+	await page.waitForURL( /wp-admin/ );
+
+	await page.goto( '/wp-admin/admin.php?page=nplus-sso' );
+	await page.fill( '#nplus_test_email', 'connection.test@yopmail.com' );
+	await page.fill( '#nplus_test_campaign', '12345' );
+	await page.fill( '#nplus_test_sku', 'TEST-SKU' );
+	await page.click( 'form:has(#nplus_test_email) [type=submit]' );
+
+	const rows = page.locator( '#nplus-test ~ table.widefat tbody tr' );
+	await expect( rows ).toHaveCount( 4 );
+	for ( let i = 0; i < 4; i++ ) {
+		await expect( rows.nth( i ).locator( 'td' ).nth( 1 ) ).toHaveText( 'OK' );
+	}
+	// Secrets never shown in the result.
+	const html = await page.content();
+	expect( html ).not.toContain( 'test-wstoken' );
+	expect( html ).not.toContain( 'test-secret' );
+
+	const [ nplus ] = await Promise.all( [ context.waitForEvent( 'page' ), page.click( 'text=Open N+ as the test learner' ) ] );
+	await expect( nplus.locator( '#nplus-welcome' ) ).toHaveText( 'Welcome to N+, NPlus Test' );
 } );

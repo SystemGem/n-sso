@@ -42,6 +42,10 @@ define( 'NPLUS_SSO_API_BASE_URL', 'http://127.0.0.1:$MOCK_PORT' );
 define( 'NPLUS_SSO_API_KEY', 'test-api-key' );
 define( 'NPLUS_SSO_WSTOKEN', 'test-wstoken' );
 define( 'NPLUS_SSO_SECRET', 'test-secret' );
+// Same shape as N+ staging: clone function names, Auto Login web service with its own token.
+define( 'NPLUS_SSO_AUTOLOGIN_WSTOKEN', 'test-autologin-wstoken' );
+define( 'NPLUS_SSO_FN_CREATE_USER', 'local_lms_apis_clone_create_user_site' );
+define( 'NPLUS_SSO_FN_CREATE_ORDER', 'local_lms_apis_clone_create_order' );
 PHP
 
 $WP core install --url="http://127.0.0.1:$SITE_PORT" --title="Academy" --admin_user=admin --admin_password=admin --admin_email=admin@example.com --skip-email

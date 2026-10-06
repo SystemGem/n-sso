@@ -56,6 +56,7 @@ final class Plugin {
 
 		if ( is_admin() ) {
 			( new Admin_Order() )->register_hooks();
+			( new Connection_Test() )->register_hooks();
 		}
 	}
 

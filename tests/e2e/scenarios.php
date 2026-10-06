@@ -152,9 +152,17 @@ $log = (string) @file_get_contents( WP_CONTENT_DIR . '/e2e-mail.log' );
 check( 'processing/completed email has launch link', false !== strpos( $log, 'nplus-sso=launch' ) );
 check( 'emails never contain a signature', false === strpos( $log, 'signature=' ) );
 
-WP_CLI::log( 'Scenario: N+ rejects tampered or expired auto-login links' );
+WP_CLI::log( 'Scenario: Auto Login web service returns a one-time N+ login link' );
 $uid    = (int) get_user_meta( $user_id, Provisioner::META_USER_ID, true );
 $client = new Api_Client();
+$link   = $client->auto_login( $uid );
+check( 'login link returned', is_string( $link ) && false !== strpos( $link, '/auto-login/session?token=' ) );
+check( 'login link works once', 200 === wp_remote_retrieve_response_code( wp_remote_get( $link ) ) );
+check( 'login link cannot be replayed', 403 === wp_remote_retrieve_response_code( wp_remote_get( $link ) ) );
+$bad = $client->auto_login( $uid + 999 );
+check( 'unknown N+ user is refused', is_wp_error( $bad ) );
+
+WP_CLI::log( 'Scenario: PDF redirect variant rejects tampered or expired links' );
 $good   = $client->auto_login_url( $uid );
 check( 'valid link accepted', 200 === wp_remote_retrieve_response_code( wp_remote_get( $good ) ) );
 check( 'other uid with same signature rejected', 403 === wp_remote_retrieve_response_code( wp_remote_get( str_replace( 'uid=' . $uid, 'uid=' . ( $uid + 1 ), $good ) ) ) );

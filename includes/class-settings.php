@@ -10,6 +10,10 @@
  *   define( 'NPLUS_SSO_WSTOKEN', '...' );          // wstoken
  *   define( 'NPLUS_SSO_SECRET', '...' );           // HMAC secret (Create User)
  *   define( 'NPLUS_SSO_AUTOLOGIN_SECRET', '...' ); // HMAC secret (Auto Login), optional
+ *   define( 'NPLUS_SSO_AUTOLOGIN_WSTOKEN', '...' ); // wstoken for the Auto Login web service, optional
+ *   define( 'NPLUS_SSO_FN_CREATE_USER', 'local_lms_apis_clone_create_user_site' ); // staging names
+ *   define( 'NPLUS_SSO_FN_CREATE_ORDER', 'local_lms_apis_clone_create_order' );
+ *   define( 'NPLUS_SSO_FN_AUTOLOGIN', 'local_react_lms_apis_sso_autologin' );
  *
  * @package NPlusSSO
  */
@@ -35,7 +39,14 @@ class Settings {
 		'api_key'          => 'NPLUS_SSO_API_KEY',
 		'wstoken'          => 'NPLUS_SSO_WSTOKEN',
 		'secret'           => 'NPLUS_SSO_SECRET',
-		'autologin_secret' => 'NPLUS_SSO_AUTOLOGIN_SECRET',
+		'autologin_secret'    => 'NPLUS_SSO_AUTOLOGIN_SECRET',
+		'autologin_wstoken'   => 'NPLUS_SSO_AUTOLOGIN_WSTOKEN',
+		'fn_create_user'      => 'NPLUS_SSO_FN_CREATE_USER',
+		'fn_create_order'     => 'NPLUS_SSO_FN_CREATE_ORDER',
+		'fn_autologin'        => 'NPLUS_SSO_FN_AUTOLOGIN',
+		'autologin_mode'      => 'NPLUS_SSO_AUTOLOGIN_MODE',
+		'signature_format'    => 'NPLUS_SSO_SIGNATURE_FORMAT',
+		'autologin_signature' => 'NPLUS_SSO_AUTOLOGIN_SIGNATURE',
 	);
 
 	/**
@@ -43,7 +54,7 @@ class Settings {
 	 *
 	 * @var string[]
 	 */
-	const SECRET_FIELDS = array( 'api_key', 'wstoken', 'secret', 'autologin_secret' );
+	const SECRET_FIELDS = array( 'api_key', 'wstoken', 'secret', 'autologin_secret', 'autologin_wstoken' );
 
 	/**
 	 * Defaults.
@@ -57,6 +68,17 @@ class Settings {
 			'wstoken'            => '',
 			'secret'             => '',
 			'autologin_secret'   => '',
+			'autologin_wstoken'  => '',
+			// Function names: PDF documentation defaults. N+ staging uses local_lms_apis_clone_*.
+			'fn_create_user'     => 'local_lms_create_user_site',
+			'fn_create_order'    => 'local_lms_create_order',
+			'fn_autologin'       => 'local_react_lms_apis_sso_autologin',
+			// "ws" = Auto Login web service returning a login URL (N+ staging); "redirect" = GET /auto-login/ (PDF).
+			'autologin_mode'      => 'ws',
+			// "timestamp" = sign the timestamp only (verified against N+ staging samples); "prefixed" = email:timestamp (PDF).
+			'signature_format'    => 'timestamp',
+			// Auto Login string to sign: "prefixed" = userid:timestamp (PDF + N+ sample code comment) or "timestamp".
+			'autologin_signature' => 'prefixed',
 			'api_version'        => 'v1',
 			'roleid'             => 5,
 			'source'             => 'website',
@@ -226,6 +248,18 @@ class Settings {
 			}
 		}
 
+		foreach ( array( 'fn_create_user', 'fn_create_order', 'fn_autologin' ) as $fn ) {
+			if ( isset( $input[ $fn ] ) && '' !== trim( $input[ $fn ] ) ) {
+				$out[ $fn ] = preg_replace( '/[^a-z0-9_]/', '', strtolower( $input[ $fn ] ) );
+			}
+		}
+		$choices = self::choices();
+		foreach ( $choices as $key => $options ) {
+			if ( isset( $input[ $key ] ) && isset( $options[ $input[ $key ] ] ) ) {
+				$out[ $key ] = $input[ $key ];
+			}
+		}
+
 		$out['api_version']     = isset( $input['api_version'] ) ? sanitize_text_field( $input['api_version'] ) : $current['api_version'];
 		$out['roleid']          = isset( $input['roleid'] ) ? absint( $input['roleid'] ) : $current['roleid'];
 		$out['source']          = isset( $input['source'] ) ? sanitize_text_field( $input['source'] ) : $current['source'];
@@ -247,6 +281,28 @@ class Settings {
 		}
 
 		return $out;
+	}
+
+	/**
+	 * Allowed values of the select settings.
+	 *
+	 * @return array<string,array<string,string>>
+	 */
+	public static function choices() {
+		return array(
+			'autologin_mode'      => array(
+				'ws'       => __( 'Web service (POST, N+ returns a login link) - N+ staging', 'nplus-sso' ),
+				'redirect' => __( 'Redirect (GET /auto-login/ with signature) - PDF documentation', 'nplus-sso' ),
+			),
+			'signature_format'    => array(
+				'timestamp' => __( 'Timestamp only - matches N+ staging', 'nplus-sso' ),
+				'prefixed'  => __( 'email:timestamp - PDF documentation', 'nplus-sso' ),
+			),
+			'autologin_signature' => array(
+				'prefixed'  => __( 'userid:timestamp - PDF documentation', 'nplus-sso' ),
+				'timestamp' => __( 'Timestamp only', 'nplus-sso' ),
+			),
+		);
 	}
 
 	/**
@@ -295,7 +351,7 @@ class Settings {
 						<th scope="row"><label for="nplus_api_base_url"><?php esc_html_e( 'N+ base URL', 'nplus-sso' ); ?></label></th>
 						<td>
 							<input type="url" class="regular-text" id="nplus_api_base_url" name="<?php echo esc_attr( $name ); ?>[api_base_url]" value="<?php echo esc_attr( self::get( 'api_base_url' ) ); ?>" <?php disabled( self::is_constant( 'api_base_url' ) ); ?> />
-							<p class="description"><?php esc_html_e( 'Production: https://learn.nplus.global (must be HTTPS).', 'nplus-sso' ); ?></p>
+							<p class="description"><?php esc_html_e( 'Production: https://learn.nplus.global. Staging: https://stagelms.nplus.global. Must be HTTPS.', 'nplus-sso' ); ?></p>
 						</td>
 					</tr>
 					<?php
@@ -303,7 +359,8 @@ class Settings {
 						'api_key'          => array( __( 'API key (x-api-key)', 'nplus-sso' ), '' ),
 						'wstoken'          => array( __( 'Web service token (wstoken)', 'nplus-sso' ), '' ),
 						'secret'           => array( __( 'HMAC secret', 'nplus-sso' ), __( 'Used to sign Create User requests (email:timestamp).', 'nplus-sso' ) ),
-						'autologin_secret' => array( __( 'Auto Login HMAC secret (optional)', 'nplus-sso' ), __( 'Only if N+ issued a different secret for Auto Login (userid:timestamp). Leave empty to reuse the HMAC secret.', 'nplus-sso' ) ),
+						'autologin_secret' => array( __( 'Auto Login HMAC secret (optional)', 'nplus-sso' ), __( 'Only if N+ issued a different secret for Auto Login. Leave empty to reuse the HMAC secret.', 'nplus-sso' ) ),
+						'autologin_wstoken' => array( __( 'Auto Login web service token (optional)', 'nplus-sso' ), __( 'Only if N+ issued a separate wstoken for the Auto Login web service. Leave empty to reuse the web service token.', 'nplus-sso' ) ),
 					);
 					foreach ( $secret_labels as $field => $label ) :
 						$locked = self::is_constant( $field );
@@ -323,6 +380,43 @@ class Settings {
 								<?php if ( $label[1] ) : ?>
 									<p class="description"><?php echo esc_html( $label[1] ); ?></p>
 								<?php endif; ?>
+							</td>
+						</tr>
+					<?php endforeach; ?>
+				</table>
+
+				<h2><?php esc_html_e( 'N+ platform', 'nplus-sso' ); ?></h2>
+				<p class="description"><?php esc_html_e( 'N+ staging (stagelms.nplus.global) uses the function names local_lms_apis_clone_create_user_site and local_lms_apis_clone_create_order. Confirm the production names with N+.', 'nplus-sso' ); ?></p>
+				<table class="form-table" role="presentation">
+					<?php
+					$fns = array(
+						'fn_create_user'  => __( 'Create User wsfunction', 'nplus-sso' ),
+						'fn_create_order' => __( 'Assign Subscription wsfunction', 'nplus-sso' ),
+						'fn_autologin'    => __( 'Auto Login wsfunction', 'nplus-sso' ),
+					);
+					foreach ( $fns as $field => $label ) :
+						?>
+						<tr>
+							<th scope="row"><label for="nplus_<?php echo esc_attr( $field ); ?>"><?php echo esc_html( $label ); ?></label></th>
+							<td><input type="text" class="regular-text code" id="nplus_<?php echo esc_attr( $field ); ?>" name="<?php echo esc_attr( $name ); ?>[<?php echo esc_attr( $field ); ?>]" value="<?php echo esc_attr( self::get( $field ) ); ?>" <?php disabled( self::is_constant( $field ) ); ?> /></td>
+						</tr>
+					<?php endforeach; ?>
+					<?php
+					$selects = array(
+						'autologin_mode'      => __( 'Auto Login method', 'nplus-sso' ),
+						'signature_format'    => __( 'Create User / Assign Subscription signature', 'nplus-sso' ),
+						'autologin_signature' => __( 'Auto Login signature', 'nplus-sso' ),
+					);
+					foreach ( $selects as $field => $label ) :
+						?>
+						<tr>
+							<th scope="row"><label for="nplus_<?php echo esc_attr( $field ); ?>"><?php echo esc_html( $label ); ?></label></th>
+							<td>
+								<select id="nplus_<?php echo esc_attr( $field ); ?>" name="<?php echo esc_attr( $name ); ?>[<?php echo esc_attr( $field ); ?>]" <?php disabled( self::is_constant( $field ) ); ?>>
+									<?php foreach ( self::choices()[ $field ] as $value => $text ) : ?>
+										<option value="<?php echo esc_attr( $value ); ?>" <?php selected( self::get( $field ), $value ); ?>><?php echo esc_html( $text ); ?></option>
+									<?php endforeach; ?>
+								</select>
 							</td>
 						</tr>
 					<?php endforeach; ?>
@@ -378,6 +472,13 @@ class Settings {
 				</table>
 				<?php submit_button(); ?>
 			</form>
+
+			<?php
+			/**
+			 * Fires after the settings form (used by the connection test).
+			 */
+			do_action( 'nplus_sso_settings_after_form' );
+			?>
 
 			<h2><?php esc_html_e( 'How to sell N+ access', 'nplus-sso' ); ?></h2>
 			<ol>

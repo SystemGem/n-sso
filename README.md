@@ -4,9 +4,11 @@ This WordPress plugin connects our WooCommerce store to the **N+ Learning Platfo
 
 When a customer buys a product that is mapped to N+, the plugin:
 
-1. **Creates the learner on N+.** It calls the Create User API (`local_lms_create_user_site`), signed with HMAC-SHA256 over `email:timestamp`.
-2. **Assigns the purchased subscription.** It calls the N+ Subscription Assignment API (`local_lms_create_order`) once for each purchased line item.
-3. **Signs the learner straight into N+.** The "Access my N+ learning" button calls the Auto Login API with a signature over `userid:timestamp`, generated on the server at click time.
+1. **Creates the learner on N+.** It calls the Create User API (`local_lms_create_user_site`, or `local_lms_apis_clone_create_user_site` on staging), HMAC-SHA256 signed.
+2. **Assigns the purchased subscription.** It calls the N+ Subscription Assignment API (`local_lms_create_order` / `local_lms_apis_clone_create_order`) once for each purchased line item.
+3. **Signs the learner straight into N+.** The "Access my N+ learning" button calls the Auto Login web service (`local_react_lms_apis_sso_autologin`) on the server at click time, then redirects the learner to the login link N+ returns.
+
+> **N+ staging differs from the PDF documentation.** The credentials email from N+ shows different function names, a timestamp-only signature (verified against their signed samples) and an Auto Login *web service* with its own token. The plugin follows the staging behaviour by default, and every difference is a setting. See [docs/GO-LIVE.md](docs/GO-LIVE.md).
 
 The plugin works alongside our existing **WordPress → Edwiser Bridge → Moodle LMS** setup. The same WooCommerce product can still enrol the learner in our own Moodle course through Edwiser Bridge, and also grant N+ access.
 
@@ -41,17 +43,25 @@ The full step-by-step journey, including guest checkout, refunds and failures, i
 2. Go to **WordPress admin > Plugins > Add New > Upload Plugin**, upload the zip and activate it. WooCommerce must be active.
 3. Add the credentials N+ issued to `wp-config.php`. This is recommended: the N+ docs say "do not hardcode credentials", and this keeps them out of the database.
 
+   For **N+ staging**:
+
    ```php
-   define( 'NPLUS_SSO_API_BASE_URL', 'https://learn.nplus.global' );
-   define( 'NPLUS_SSO_API_KEY', '…' );          // x-api-key header
-   define( 'NPLUS_SSO_WSTOKEN', '…' );          // wstoken
-   define( 'NPLUS_SSO_SECRET', '…' );           // HMAC secret
-   // define( 'NPLUS_SSO_AUTOLOGIN_SECRET', '…' ); // only if N+ gives a separate Auto Login secret
+   define( 'NPLUS_SSO_API_BASE_URL', 'https://stagelms.nplus.global' );
+   define( 'NPLUS_SSO_API_KEY', '…' );          // "Api key" from N+ (x-api-key header)
+   define( 'NPLUS_SSO_WSTOKEN', '…' );          // "WS Token" from N+
+   define( 'NPLUS_SSO_SECRET', '…' );           // "SSO API Secret Key" from N+
+   define( 'NPLUS_SSO_FN_CREATE_USER', 'local_lms_apis_clone_create_user_site' );
+   define( 'NPLUS_SSO_FN_CREATE_ORDER', 'local_lms_apis_clone_create_order' );
+   // define( 'NPLUS_SSO_AUTOLOGIN_WSTOKEN', '…' ); // only if N+ gives a separate token for Auto Login
+   // define( 'NPLUS_SSO_AUTOLOGIN_SECRET', '…' );  // only if N+ gives a separate Auto Login secret
    ```
+
+   For **production**, use `https://learn.nplus.global` and the production credentials and function names N+ gives you.
 
    You can also enter them in **WooCommerce > N+ SSO**. Saved secrets are never shown again.
 4. Check the other settings in **WooCommerce > N+ SSO**: role ID (default 5 = student), source, payment status value, sendmail, and which order statuses trigger provisioning.
-5. Edit each product that should grant N+ access. In **Product data > N+ Learning**, tick **Grant N+ access** and enter the **N+ Campaign ID** and **Subscription SKU** from N+. Variations can override both.
+5. Scroll to **Test N+ connection**, enter the test campaign ID from N+ and click **Run test**. It runs Create User → Assign Subscription → Auto Login against N+, shows each N+ response, and gives you a button to open N+ as the test learner.
+6. Edit each product that should grant N+ access. In **Product data > N+ Learning**, tick **Grant N+ access** and enter the **N+ Campaign ID** and **Subscription SKU** from N+. Variations can override both.
 
 That's it. From now on, every paid order for that product provisions the learner on N+.
 
@@ -70,13 +80,15 @@ That's it. From now on, every paid order for that product provisions the learner
 - **Order screen > "N+ Learning" box**: shows the N+ user ID, each item's status (Assigned / Failed + reason / Pending) and the N+ order ID.
 - **Order actions > "Sync to N+"**: retries provisioning manually.
 - **Order notes**: every N+ call (success or failure) is recorded.
+- **Test N+ connection** (WooCommerce > N+ SSO): runs the three real API calls for a test learner, without an order.
 - **Logs**: WooCommerce > Status > Logs, source `nplus-sso`. Secrets and signatures are always redacted.
 - **Automatic retries**: failed provisioning is retried with exponential back-off (5 min, 10 min, 20 min …, up to "Max automatic attempts").
 - **Refunds and cancellations**: the website stops offering the launch button for that order. N+ has no cancellation API, so the order note names the N+ order ID to send to N+ support.
 
 ## Security
 
-- Signatures are only ever generated on the server, at the moment of the click, with a fresh timestamp. Pages and emails link to our own `/?nplus-sso=launch` endpoint and never to a pre-signed N+ URL.
+- Signatures and N+ login links are only ever generated on the server, at the moment of the click, with a fresh timestamp. Pages and emails link to our own `/?nplus-sso=launch` endpoint, never to N+ directly.
+- The plugin only redirects to login links on the N+ domain, over HTTPS.
 - The launch endpoint only signs in **the logged-in owner** of an active enrollment, or the buyer of a specific order identified by its secret WooCommerce order key (guest checkout, which can be disabled).
 - HTTPS is enforced for the N+ base URL.
 - Secrets can live in `wp-config.php` constants, are never printed back into the settings form, and are redacted from all logs.
@@ -97,7 +109,7 @@ Functions: `nplus_sso_get_user_id()`, `nplus_sso_user_has_access()`, `nplus_sso_
 ## Testing
 
 ```bash
-composer install && composer test   # 26 unit tests: signatures, API requests/responses, errors, redaction, settings
+composer install && composer test   # 33 unit tests: signatures, API requests/responses, errors, redaction, settings
 ```
 
 **End-to-end.** This builds a throw-away WordPress + WooCommerce site on SQLite, runs a **mock N+ server** that validates the API key, token, HMAC signatures and timestamps the way the docs describe, then drives real purchases in Chromium:
@@ -111,8 +123,8 @@ WP_CLI="php /path/to/wp-cli.phar" tests/e2e/run.sh
 
 What the tests cover:
 
-- **Browser journey (Playwright).** A registered learner buys, sees the thank-you box, clicks once and lands in N+. A second purchase reuses the same N+ user. Guest checkout works, and a forged order key is rejected. Logged-out visitors are sent to log in. Non-N+ products never call N+.
-- **Server scenarios (`tests/e2e/scenarios.php`).** N+ outage → failure recorded → retry scheduled → retry succeeds. Provisioning is idempotent across status changes. Refund removes access and re-completing restores it. Unpaid orders are not provisioned. Emails contain the launch link but no signature. N+ rejects tampered or expired auto-login links.
+- **Browser journey (Playwright).** The mock behaves like N+ staging (clone function names, timestamp signatures, Auto Login web service with its own token and one-time login links). A registered learner buys, sees the thank-you box, clicks once and lands in N+. A second purchase reuses the same N+ user. Guest checkout works, and a forged order key is rejected. Logged-out visitors are sent to log in. Non-N+ products never call N+. The admin "Test N+ connection" tool works end to end.
+- **Server scenarios (`tests/e2e/scenarios.php`).** N+ outage → failure recorded → retry scheduled → retry succeeds. Provisioning is idempotent across status changes. Refund removes access and re-completing restores it. Unpaid orders are not provisioned. Emails contain the launch link but no signature. Auto Login links work once and can't be replayed. Tampered or expired links are rejected.
 - The run fails if the plugin raises any PHP notice.
 
 CI (`.github/workflows/ci.yml`) runs the unit tests on PHP 7.4, 8.1 and 8.3, runs the full end-to-end suite, and publishes the installable zip.

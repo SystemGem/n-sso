@@ -65,7 +65,7 @@ All order access goes through WooCommerce CRUD, so the plugin is compatible with
 | email | WP account email (billing email for guests) |
 | phone1 | billing phone |
 | roleid | setting (default 5) |
-| signature | `hash_hmac('sha256', email . ':' . timestamp, secret)` |
+| signature | `hash_hmac('sha256', timestamp, secret)` (N+ staging, verified); setting "email:timestamp" for the PDF variant |
 | timestamp | `time()` at the moment of the call |
 | version | setting (default `v1`) |
 | country | billing country (ISO code) |
@@ -90,7 +90,11 @@ All order access goes through WooCommerce CRUD, so the plugin is compatible with
 | subscription_skuid | product's N+ SKU (falls back to the product SKU) |
 | subscription_startdate | order paid date, format from settings (default `Y-m-d H:i:s`) |
 | sendmail | setting (default 1) |
+| signature / timestamp | `hash_hmac('sha256', timestamp, secret)` (required by N+ staging) |
 
 ### Auto Login
 
-`{base}/auto-login/?uid={N+ user id}&timestamp={time()}&signature={hash_hmac('sha256', uid . ':' . timestamp, secret)}`. The URL is built in `Sso::maybe_launch()` at click time and sent as a 302 redirect.
+Called in `Sso::maybe_launch()` at click time, then the learner is redirected with a 302.
+
+- **Web service (default, as on N+ staging):** POST `wsfunction=local_react_lms_apis_sso_autologin`, `uid`, `timestamp`, `signature = hash_hmac('sha256', uid . ':' . timestamp, secret)`, with the Auto Login wstoken (falls back to the main token). The login URL is read from the JSON response, and only HTTPS URLs on the N+ domain are accepted.
+- **Redirect (PDF variant):** `{base}/auto-login/?uid={id}&timestamp={time()}&signature={hash_hmac('sha256', uid . ':' . timestamp, secret)}`.

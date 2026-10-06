@@ -3,8 +3,8 @@
  * The launch endpoint: /?nplus-sso=launch
  *
  * Every "Access N+" button links here, never directly to N+, so that the
- * Auto Login signature is generated server-side, at click time, with a fresh
- * timestamp, and only for the right person:
+ * Auto Login call (and its signature) happens server-side, at click time, with a
+ * fresh timestamp, and only for the right person:
  *
  *   - logged-in customer           -> their own N+ user ID (if they have an active enrollment)
  *   - &order_id=..&key=wc_order_.. -> the buyer of that order (guest checkout / thank-you page)
@@ -71,7 +71,12 @@ class Sso {
 		}
 
 		$client = new Api_Client();
-		$url    = $client->auto_login_url( $nplus_user_id );
+		$url    = $client->auto_login( $nplus_user_id );
+		if ( is_wp_error( $url ) ) {
+			Logger::error( 'N+ auto login failed', array( 'uid' => $nplus_user_id, 'error' => $url->get_error_message() ) );
+			$this->fail( new \WP_Error( 'nplus_autologin_failed', __( 'We could not sign you in to N+ right now. Please try again in a few minutes.', 'nplus-sso' ), array( 'status' => 502 ) ) );
+			return;
+		}
 
 		/**
 		 * Fires right before the browser is sent to N+.
@@ -83,7 +88,7 @@ class Sso {
 		Logger::info( 'N+ launch', array( 'uid' => $nplus_user_id, 'wp_user' => get_current_user_id() ) );
 
 		// The N+ host comes from admin settings, so allow it explicitly for wp_safe_redirect().
-		$host = $client->host();
+		$host = (string) wp_parse_url( $url, PHP_URL_HOST );
 		add_filter(
 			'allowed_redirect_hosts',
 			static function ( $hosts ) use ( $host ) {
