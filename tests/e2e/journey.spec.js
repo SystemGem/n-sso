@@ -269,3 +269,18 @@ test( 'test mode: full journey without contacting N+, then switching it off clea
 	expect( users ).toContain( 'tara.sandbox@example.com' );
 	await context.close();
 } );
+
+test( 'admin order screen shows the N+ box and hides internal item fields', async ( { page } ) => {
+	await page.goto( '/wp-login.php' );
+	await page.fill( '#user_login', 'admin' );
+	await page.fill( '#user_pass', 'admin' );
+	await page.click( '#wp-submit' );
+	await page.waitForURL( /wp-admin/ );
+
+	// Open the most recent order that has the N+ product.
+	await page.goto( '/wp-admin/admin.php?page=wc-orders' );
+	await page.locator( 'a.order-view' ).first().click();
+	const box = page.locator( '#nplus-sso-order' );
+	await expect( box ).toContainText( 'Assigned (N+ order' );
+	await expect( page.locator( '#order_line_items' ) ).not.toContainText( '_nplus_' );
+} );

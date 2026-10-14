@@ -4,7 +4,7 @@ Tags: woocommerce, sso, lms, moodle, learning
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.2.1
+Stable tag: 1.2.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -27,6 +27,9 @@ Background processing with automatic retries, an order meta box, order notes, re
 3. Edit a product > Product data > N+ Learning: tick "Grant N+ access" and enter the N+ Campaign ID and Subscription SKU.
 
 == Changelog ==
+
+= 1.2.2 =
+* Hide the plugin's internal line-item fields on the admin order screen (the N+ Learning box shows them).
 
 = 1.2.1 =
 * Fix: test-mode login link reported "invalid" on hosts with a case-sensitive object cache (e.g. SiteGround Memcached). Links now last 10 minutes.

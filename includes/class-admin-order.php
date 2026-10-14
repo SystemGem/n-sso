@@ -19,6 +19,30 @@ class Admin_Order {
 	 */
 	public function register_hooks() {
 		add_action( 'add_meta_boxes', array( $this, 'add_meta_box' ) );
+		add_filter( 'woocommerce_hidden_order_itemmeta', array( $this, 'hide_item_meta' ) );
+	}
+
+	/**
+	 * Keep the plugin's internal line-item fields out of the order items list;
+	 * the "N+ Learning" box shows the same information in readable form.
+	 *
+	 * @param string[] $keys Hidden meta keys.
+	 * @return string[]
+	 */
+	public function hide_item_meta( $keys ) {
+		return array_merge(
+			(array) $keys,
+			array(
+				Provisioner::ITEM_STATUS,
+				Provisioner::ITEM_ORDER_ID,
+				Provisioner::ITEM_ERROR,
+				Provisioner::ITEM_ALREADY_ENROLLED,
+				Provisioner::ITEM_ENROLLED_AT,
+				Provisioner::ITEM_WEBSITE_ORDER_ID,
+				'_nplus_campaign_id',
+				'_nplus_subscription_sku',
+			)
+		);
 	}
 
 	/**
