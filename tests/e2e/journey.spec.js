@@ -251,9 +251,13 @@ test( 'test mode: full journey without contacting N+, then switching it off clea
 	// Nothing reached N+.
 	expect( ( await mockState( request ) ).requests.length ).toBe( before );
 
-	// The one-time simulated login link cannot be reused.
+	// The simulated link survives a reload/prefetch, and its token is lower-case hex
+	// (mixed case broke on case-sensitive object caches such as Memcached).
+	expect( new URL( simulated.url() ).searchParams.get( 'token' ) ).toMatch( /^[a-f0-9]{32}$/ );
 	const replay = await context.request.get( simulated.url() );
-	expect( replay.status() ).toBe( 403 );
+	expect( replay.status() ).toBe( 200 );
+	const forged = await context.request.get( simulated.url().replace( /token=[a-f0-9]+/, 'token=' + '0'.repeat( 32 ) ) );
+	expect( forged.status() ).toBe( 403 );
 
 	// Switching test mode off removes the simulated data; the same button now provisions on real N+.
 	await setTestMode( false );

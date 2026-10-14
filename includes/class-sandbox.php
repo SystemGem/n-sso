@@ -136,7 +136,8 @@ class Sandbox {
 	 * @return string
 	 */
 	public static function login_url( $uid ) {
-		$token = wp_generate_password( 32, false );
+		// Lower-case hex: survives any URL/key sanitising and case-sensitive object caches (e.g. Memcached).
+		$token = bin2hex( random_bytes( 16 ) );
 		set_transient( 'nplus_sso_sandbox_' . $token, (int) $uid, 10 * MINUTE_IN_SECONDS );
 		return add_query_arg(
 			array(
@@ -155,17 +156,16 @@ class Sandbox {
 		if ( ! isset( $_GET[ Sso::QUERY_VAR ] ) || self::QUERY_VALUE !== $_GET[ Sso::QUERY_VAR ] ) {
 			return;
 		}
-		$token = isset( $_GET['token'] ) ? sanitize_key( wp_unslash( $_GET['token'] ) ) : '';
+		$token = isset( $_GET['token'] ) ? preg_replace( '/[^a-f0-9]/', '', strtolower( (string) wp_unslash( $_GET['token'] ) ) ) : '';
 		// phpcs:enable
 		nocache_headers();
 
+		// Valid for 10 minutes rather than single-use, so a browser prefetch or reload cannot "use up" the
+		// link before the page is shown. It only opens this simulated page, never the real N+.
 		$uid = $token ? (int) get_transient( 'nplus_sso_sandbox_' . $token ) : 0;
-		if ( $token ) {
-			delete_transient( 'nplus_sso_sandbox_' . $token );
-		}
 		$state = self::state();
 		if ( ! $uid || ! isset( $state['users'][ (string) $uid ] ) ) {
-			wp_die( esc_html__( 'This simulated N+ login link is invalid or was already used. Go back and click the button again.', 'nplus-sso' ), esc_html__( 'N+ test mode', 'nplus-sso' ), array( 'response' => 403 ) );
+			wp_die( esc_html__( 'This simulated N+ login link is invalid or has expired (links last 10 minutes). Go back and click the button again.', 'nplus-sso' ), esc_html__( 'N+ test mode', 'nplus-sso' ), array( 'response' => 403 ) );
 		}
 
 		$user    = $state['users'][ (string) $uid ];
