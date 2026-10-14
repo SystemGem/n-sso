@@ -65,6 +65,16 @@ The full step-by-step journey, including guest checkout, refunds and failures, i
 
 That's it. From now on, every paid order for that product provisions the learner on N+.
 
+## Test mode (try everything before N+ is reachable)
+
+In **WooCommerce > N+ SSO**, tick **Test mode** and save. While it is on:
+
+- nothing is sent to N+; a simulated N+ inside the plugin answers Create User, Assign Subscription and Auto Login;
+- the whole journey works on your real site: purchase → thank-you button → **Access my N+ learning** → a simulated "Welcome to N+" page listing the learner's subscriptions; My Account, the order box, order notes and the connection test all work as usual;
+- a yellow notice in the admin reminds you that test mode is on.
+
+Turning test mode off automatically removes everything it created (simulated N+ IDs on learners and orders). Real orders are never touched. After that, the same buttons provision the learner on the real N+.
+
 ## Where learners find the button
 
 | Place | Notes |

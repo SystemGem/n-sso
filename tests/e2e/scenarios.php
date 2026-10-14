@@ -168,6 +168,25 @@ check( 'valid link accepted', 200 === wp_remote_retrieve_response_code( wp_remot
 check( 'other uid with same signature rejected', 403 === wp_remote_retrieve_response_code( wp_remote_get( str_replace( 'uid=' . $uid, 'uid=' . ( $uid + 1 ), $good ) ) ) );
 check( 'expired timestamp rejected', 403 === wp_remote_retrieve_response_code( wp_remote_get( $client->auto_login_url( $uid, time() - 3600 ) ) ) );
 
+WP_CLI::log( 'Scenario: switching test mode off only clears test-mode data' );
+$real_order = $order; // Provisioned on (mock) real N+ above.
+$real_uid   = (int) get_user_meta( $user_id, Provisioner::META_USER_ID, true );
+$settings   = get_option( 'nplus_sso_settings' );
+update_option( 'nplus_sso_settings', array_merge( $settings, array( 'sandbox' => 1 ) ) );
+$requests_before = count( mock_state()['requests'] );
+$test_user       = wp_insert_user( array( 'user_login' => 'sbx' . wp_rand(), 'user_email' => 'sbx' . wp_rand() . '@example.com', 'user_pass' => wp_generate_password(), 'role' => 'customer' ) );
+$test_order      = new_order( $test_user, $product );
+$test_item       = item_of( wc_get_order( $test_order->get_id() ) );
+check( 'test-mode order provisioned by the simulation', Provisioner::STATUS_ENROLLED === $test_item->get_meta( Provisioner::ITEM_STATUS ) );
+check( 'simulated N+ user id is in the test range', (int) get_user_meta( $test_user, Provisioner::META_USER_ID, true ) >= \NPlusSSO\Sandbox::FIRST_USER_ID );
+check( 'nothing was sent to N+ in test mode', count( mock_state()['requests'] ) === $requests_before );
+update_option( 'nplus_sso_settings', array_merge( get_option( 'nplus_sso_settings' ), array( 'sandbox' => 0 ) ) );
+Access::flush_cache();
+check( 'test user N+ id removed', ! get_user_meta( $test_user, Provisioner::META_USER_ID, true ) );
+check( 'test order item reset', '' === (string) item_of( wc_get_order( $test_order->get_id() ) )->get_meta( Provisioner::ITEM_STATUS ) );
+check( 'real learner keeps N+ id', (int) get_user_meta( $user_id, Provisioner::META_USER_ID, true ) === $real_uid );
+check( 'real order keeps its enrollment', Provisioner::STATUS_ENROLLED === item_of( wc_get_order( $real_order->get_id() ) )->get_meta( Provisioner::ITEM_STATUS ) );
+
 $failures = check();
 if ( $failures ) {
 	WP_CLI::error( "$failures scenario check(s) failed." );

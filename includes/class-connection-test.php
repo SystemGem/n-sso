@@ -116,7 +116,7 @@ class Connection_Test {
 			'login_url' => '',
 		);
 
-		$missing = Settings::missing_credentials();
+		$missing = Sandbox::enabled() ? array() : Settings::missing_credentials();
 		if ( $missing ) {
 			$result['steps'][] = self::step( __( 'Configuration', 'nplus-sso' ), false, 'Missing: ' . implode( ', ', $missing ) );
 			return $result;

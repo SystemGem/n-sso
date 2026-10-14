@@ -53,6 +53,7 @@ final class Plugin {
 		( new Order_Handler() )->register_hooks();
 		( new Sso() )->register_hooks();
 		( new Account() )->register_hooks();
+		( new Sandbox() )->register_hooks();
 
 		if ( is_admin() ) {
 			( new Admin_Order() )->register_hooks();

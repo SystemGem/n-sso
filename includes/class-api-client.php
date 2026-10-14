@@ -64,6 +64,7 @@ class Api_Client {
 				'signature_format'    => (string) Settings::get( 'signature_format' ),
 				'autologin_signature' => (string) Settings::get( 'autologin_signature' ),
 				'autologin_mode'      => (string) Settings::get( 'autologin_mode' ),
+				'sandbox'             => (bool) Settings::get( 'sandbox' ),
 			);
 		}
 		$this->config = array_merge(
@@ -82,6 +83,7 @@ class Api_Client {
 				'signature_format'    => Signer::FORMAT_TIMESTAMP,
 				'autologin_signature' => Signer::FORMAT_PREFIXED,
 				'autologin_mode'      => self::AUTOLOGIN_WS,
+				'sandbox'             => false,
 			),
 			array_filter(
 				$config,
@@ -195,7 +197,7 @@ class Api_Client {
 	 * @return string|WP_Error
 	 */
 	public function auto_login( $nplus_user_id, $timestamp = null ) {
-		if ( self::AUTOLOGIN_REDIRECT === $this->config['autologin_mode'] ) {
+		if ( self::AUTOLOGIN_REDIRECT === $this->config['autologin_mode'] && empty( $this->config['sandbox'] ) ) {
 			return $this->auto_login_url( $nplus_user_id, $timestamp );
 		}
 
@@ -285,6 +287,10 @@ class Api_Client {
 		if ( $host === $base ) {
 			return true;
 		}
+		// Test mode: the simulated N+ lives on this site.
+		if ( ! empty( $this->config['sandbox'] ) && function_exists( 'home_url' ) && strtolower( (string) wp_parse_url( home_url(), PHP_URL_HOST ) ) === $host ) {
+			return true;
+		}
 		$labels = explode( '.', $base );
 		$domain = count( $labels ) > 2 ? implode( '.', array_slice( $labels, 1 ) ) : $base;
 		$ok     = substr( $host, -strlen( '.' . $domain ) ) === '.' . $domain || $host === $domain;
@@ -340,6 +346,22 @@ class Api_Client {
 	 */
 	private function call( array $params, $wstoken = null, $require_success = true ) {
 		$wstoken = null === $wstoken ? $this->config['wstoken'] : $wstoken;
+
+		if ( ! empty( $this->config['sandbox'] ) ) {
+			// Test mode: answered by the simulated N+ on this site, nothing leaves the server.
+			$body = array_merge( array( 'wstoken' => $wstoken, 'moodlewsrestformat' => 'json' ), $params );
+			$data = Sandbox::handle(
+				$body,
+				array(
+					'create_user'  => $this->config['fn_create_user'],
+					'create_order' => $this->config['fn_create_order'],
+					'autologin'    => $this->config['fn_autologin'],
+				)
+			);
+			Logger::info( 'N+ (test mode) ' . $params['wsfunction'], array( 'request' => self::loggable( $body ), 'response' => $data ) );
+			return $this->interpret( $data, $params['wsfunction'], $require_success );
+		}
+
 		if ( '' === $this->config['base_url'] || '' === (string) $wstoken || '' === $this->config['api_key'] ) {
 			return new WP_Error( 'nplus_not_configured', __( 'N+ API credentials are not configured.', 'nplus-sso' ) );
 		}
@@ -411,6 +433,20 @@ class Api_Client {
 			Logger::error( 'N+ invalid JSON ' . $params['wsfunction'], array( 'body' => substr( (string) $payload, 0, 500 ) ) );
 			return new WP_Error( 'nplus_invalid_json', __( 'N+ returned an invalid response.', 'nplus-sso' ) );
 		}
+
+		return $this->interpret( $data, $params['wsfunction'], $require_success );
+	}
+
+	/**
+	 * Turn a decoded N+ response into data or a WP_Error.
+	 *
+	 * @param array  $data            Decoded response.
+	 * @param string $fn              wsfunction (for logs).
+	 * @param bool   $require_success Require "status": "success".
+	 * @return array|WP_Error
+	 */
+	private function interpret( array $data, $fn, $require_success ) {
+		$params = array( 'wsfunction' => $fn );
 
 		// Moodle web service exceptions: {"exception":"...","errorcode":"...","message":"..."}.
 		if ( isset( $data['exception'] ) || isset( $data['errorcode'] ) ) {
@@ -486,6 +522,7 @@ class Api_Client {
 			'autologin_wstoken' => $this->config['autologin_wstoken'] === $this->config['wstoken'] ? 'same as wstoken' : $mask( $this->config['autologin_wstoken'], 4 ),
 			'functions'         => $this->config['fn_create_user'] . ', ' . $this->config['fn_create_order'] . ', ' . $this->config['fn_autologin'],
 			'signature'         => $this->config['signature_format'] . ' / auto login: ' . $this->config['autologin_signature'] . ' / mode: ' . $this->config['autologin_mode'],
+			'test mode'         => empty( $this->config['sandbox'] ) ? 'off (real N+)' : 'ON - simulated N+, nothing is sent to N+',
 		);
 	}
 

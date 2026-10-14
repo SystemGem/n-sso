@@ -213,6 +213,7 @@ class Provisioner {
 		 * @param array     $response      Create User API response.
 		 */
 		do_action( 'nplus_sso_user_created', $nplus_user_id, $order, $response );
+		Sandbox::flag( $order, $wp_user_id );
 
 		return $nplus_user_id;
 	}
@@ -257,6 +258,7 @@ class Provisioner {
 
 		$order->update_meta_data( self::META_HAS_ENROLLMENT, 'yes' );
 		$order->save();
+		Sandbox::flag( $order, 0 );
 
 		$order->add_order_note(
 			sprintf(

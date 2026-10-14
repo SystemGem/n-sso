@@ -215,3 +215,53 @@ test( 'saved keys stay visible (masked) on the settings page and can be revealed
 	await page.waitForURL( /settings-updated=true/ );
 	await expect( field ).toHaveValue( '' );
 } );
+
+test( 'test mode: full journey without contacting N+, then switching it off cleans up', async ( { browser, page, request } ) => {
+	const adminLogin = async () => {
+		await page.goto( '/wp-login.php' );
+		await page.fill( '#user_login', 'admin' );
+		await page.fill( '#user_pass', 'admin' );
+		await page.click( '#wp-submit' );
+		await page.waitForURL( /wp-admin/ );
+	};
+	const setTestMode = async ( on ) => {
+		await page.goto( '/wp-admin/admin.php?page=nplus-sso' );
+		await page.locator( '#nplus_sandbox' ).setChecked( on );
+		await page.click( '#submit' );
+		await page.waitForURL( /settings-updated=true/ );
+	};
+
+	await adminLogin();
+	await setTestMode( true );
+	await expect( page.locator( '.notice-warning' ).filter( { hasText: 'N+ test mode is ON' } ).first() ).toBeVisible();
+
+	const before = ( await mockState( request ) ).requests.length;
+
+	// A guest buys the N+ product while test mode is on.
+	const context = await browser.newContext();
+	const shopper = await context.newPage();
+	await checkout( shopper, env.nplusProductId, { first_name: 'Tara', last_name: 'Sandbox', email: 'tara.sandbox@example.com', ...address } );
+	const launch = shopper.locator( '.nplus-sso-thankyou a.nplus-sso-launch' );
+	const [ simulated ] = await Promise.all( [ context.waitForEvent( 'page' ), launch.click() ] );
+	await expect( simulated.locator( '#nplus-sandbox-welcome' ) ).toHaveText( 'Welcome to N+, Tara Sandbox' );
+	await expect( simulated.locator( '#nplus-sandbox-subscriptions' ) ).toContainText( '12345' );
+	await expect( simulated.locator( 'body' ) ).toContainText( 'TEST MODE' );
+	expect( simulated.url() ).toContain( env.siteUrl );
+
+	// Nothing reached N+.
+	expect( ( await mockState( request ) ).requests.length ).toBe( before );
+
+	// The one-time simulated login link cannot be reused.
+	const replay = await context.request.get( simulated.url() );
+	expect( replay.status() ).toBe( 403 );
+
+	// Switching test mode off removes the simulated data; the same button now provisions on real N+.
+	await setTestMode( false );
+	await expect( page.locator( '.notice-success' ).filter( { hasText: 'N+ test data cleared' } ) ).toBeVisible();
+	const [ real ] = await Promise.all( [ context.waitForEvent( 'page' ), launch.click() ] );
+	await expect( real.locator( '#nplus-welcome' ) ).toHaveText( 'Welcome to N+, Tara Sandbox' );
+	expect( real.url() ).toContain( env.mockUrl );
+	const users = Object.values( ( await mockState( request ) ).users ).map( ( u ) => u.email );
+	expect( users ).toContain( 'tara.sandbox@example.com' );
+	await context.close();
+} );

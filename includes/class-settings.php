@@ -92,6 +92,7 @@ class Settings {
 			'request_timeout'    => 20,
 			'max_attempts'       => 5,
 			'debug'              => 0,
+			'sandbox'            => 0,
 		);
 	}
 
@@ -268,7 +269,7 @@ class Settings {
 		$out['request_timeout'] = isset( $input['request_timeout'] ) ? max( 5, min( 120, absint( $input['request_timeout'] ) ) ) : $current['request_timeout'];
 		$out['max_attempts']    = isset( $input['max_attempts'] ) ? max( 1, min( 20, absint( $input['max_attempts'] ) ) ) : $current['max_attempts'];
 
-		foreach ( array( 'sendmail', 'allow_guest_launch', 'show_in_emails', 'debug' ) as $flag ) {
+		foreach ( array( 'sendmail', 'allow_guest_launch', 'show_in_emails', 'debug', 'sandbox' ) as $flag ) {
 			$out[ $flag ] = empty( $input[ $flag ] ) ? 0 : 1;
 		}
 
@@ -312,7 +313,7 @@ class Settings {
 			return;
 		}
 		$missing = self::missing_credentials();
-		if ( empty( $missing ) ) {
+		if ( empty( $missing ) || Sandbox::enabled() ) {
 			return;
 		}
 		printf(
@@ -344,6 +345,20 @@ class Settings {
 			<p><?php esc_html_e( 'When a customer pays for a WooCommerce product that has an N+ Campaign ID, the plugin creates the learner on N+, assigns the subscription and gives the learner a one-click "Access N+" button (thank-you page, My Account, emails).', 'nplus-sso' ); ?></p>
 			<form method="post" action="options.php">
 				<?php settings_fields( 'nplus_sso' ); ?>
+				<h2><?php esc_html_e( 'Test mode', 'nplus-sso' ); ?></h2>
+				<table class="form-table" role="presentation">
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Simulate N+', 'nplus-sso' ); ?></th>
+						<td>
+							<label><input type="checkbox" id="nplus_sandbox" name="<?php echo esc_attr( $name ); ?>[sandbox]" value="1" <?php checked( ! empty( $s['sandbox'] ) ); ?> /> <strong><?php esc_html_e( 'Test mode: do not contact N+, use a simulated N+ on this site', 'nplus-sso' ); ?></strong></label>
+							<p class="description"><?php esc_html_e( 'Lets you test the whole journey (purchase, thank-you button, My Account, admin order box) before N+ is reachable. "Access my N+ learning" opens a simulated N+ page on this site. Turning test mode off removes all simulated data automatically.', 'nplus-sso' ); ?></p>
+							<?php if ( ! empty( $s['sandbox'] ) ) : ?>
+								<p><a class="button" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=' . Sandbox::RESET_ACTION ), Sandbox::RESET_ACTION ) ); ?>"><?php esc_html_e( 'Clear test data now', 'nplus-sso' ); ?></a></p>
+							<?php endif; ?>
+						</td>
+					</tr>
+				</table>
+
 				<h2><?php esc_html_e( 'API credentials (issued by N+)', 'nplus-sso' ); ?></h2>
 				<table class="form-table" role="presentation">
 					<tr>
