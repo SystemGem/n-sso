@@ -16,17 +16,18 @@ class SettingsTest extends TestCase {
 		$this->assertSame( 5, $d['roleid'] );
 	}
 
-	public function test_sanitize_keeps_saved_secret_when_field_left_empty() {
-		$GLOBALS['nplus_test_options']['nplus_sso_settings'] = array( 'secret' => 'OLD', 'api_key' => 'K' );
-		$out = ( new Settings() )->sanitize( array( 'secret' => '', 'api_key' => 'NEW%41<x' ) );
-		$this->assertSame( 'OLD', $out['secret'] );
+	public function test_sanitize_secrets_store_what_the_prefilled_form_submits() {
+		$GLOBALS['nplus_test_options']['nplus_sso_settings'] = array( 'secret' => 'OLD', 'api_key' => 'K', 'wstoken' => 'T' );
+		$out = ( new Settings() )->sanitize( array( 'secret' => ' OLD ', 'api_key' => 'NEW%41<x', 'wstoken' => '' ) );
+		$this->assertSame( 'OLD', $out['secret'], 'unchanged value is kept (trimmed)' );
 		$this->assertSame( 'NEW%41<x', $out['api_key'], 'secrets must not be mangled by text sanitising' );
+		$this->assertSame( '', $out['wstoken'], 'emptying a field clears it' );
 	}
 
-	public function test_sanitize_can_clear_secret() {
+	public function test_sanitize_keeps_secret_missing_from_request() {
 		$GLOBALS['nplus_test_options']['nplus_sso_settings'] = array( 'secret' => 'OLD' );
-		$out = ( new Settings() )->sanitize( array( 'secret_clear' => '1' ) );
-		$this->assertSame( '', $out['secret'] );
+		$out = ( new Settings() )->sanitize( array( 'api_version' => 'v1' ) );
+		$this->assertSame( 'OLD', $out['secret'] );
 	}
 
 	public function test_sanitize_trigger_statuses_and_bounds() {

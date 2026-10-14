@@ -58,7 +58,7 @@ The full step-by-step journey, including guest checkout, refunds and failures, i
 
    For **production**, use `https://learn.nplus.global` and the production credentials and function names N+ gives you.
 
-   You can also enter them in **WooCommerce > N+ SSO**. Saved secrets are never shown again.
+   You can also enter them in **WooCommerce > N+ SSO**. Saved keys stay in their fields, masked; click **Show** to check them.
 4. Check the other settings in **WooCommerce > N+ SSO**: role ID (default 5 = student), source, payment status value, sendmail, and which order statuses trigger provisioning.
 5. Scroll to **Test N+ connection**, enter the test campaign ID from N+ and click **Run test**. It runs Create User → Assign Subscription → Auto Login against N+, shows each N+ response, and gives you a button to open N+ as the test learner.
 6. Edit each product that should grant N+ access. In **Product data > N+ Learning**, tick **Grant N+ access** and enter the **N+ Campaign ID** and **Subscription SKU** from N+. Variations can override both.
@@ -91,7 +91,7 @@ That's it. From now on, every paid order for that product provisions the learner
 - The plugin only redirects to login links on the N+ domain, over HTTPS.
 - The launch endpoint only signs in **the logged-in owner** of an active enrollment, or the buyer of a specific order identified by its secret WooCommerce order key (guest checkout, which can be disabled).
 - HTTPS is enforced for the N+ base URL.
-- Secrets can live in `wp-config.php` constants, are never printed back into the settings form, and are redacted from all logs.
+- Secrets can live in `wp-config.php` constants (then they never appear in the admin page at all). Keys saved in the settings page are shown masked to admins who can manage WooCommerce. Secrets are redacted from all logs.
 
 ## Developer hooks
 

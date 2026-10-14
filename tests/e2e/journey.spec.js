@@ -179,3 +179,39 @@ test( 'admin "Test N+ connection" runs all three N+ calls and opens N+', async (
 	const [ nplus ] = await Promise.all( [ context.waitForEvent( 'page' ), page.click( 'text=Open N+ as the test learner' ) ] );
 	await expect( nplus.locator( '#nplus-welcome' ) ).toHaveText( 'Welcome to N+, NPlus Test' );
 } );
+
+test( 'saved keys stay visible (masked) on the settings page and can be revealed', async ( { page } ) => {
+	await page.goto( '/wp-login.php' );
+	await page.fill( '#user_login', 'admin' );
+	await page.fill( '#user_pass', 'admin' );
+	await page.click( '#wp-submit' );
+	await page.waitForURL( /wp-admin/ );
+
+	// Keys defined in wp-config.php are shown as locked.
+	await page.goto( '/wp-admin/admin.php?page=nplus-sso' );
+	await expect( page.locator( 'text=NPLUS_SSO_SECRET' ) ).toBeVisible();
+
+	// A key saved through the form is still in its field after saving.
+	const field = page.locator( '#nplus_autologin_secret' );
+	await field.fill( 'Ab%41<x>==' );
+	await page.click( '#submit' );
+	await page.waitForURL( /settings-updated=true/ );
+	await expect( field ).toHaveValue( 'Ab%41<x>==' );
+	await expect( field ).toHaveAttribute( 'type', 'password' );
+
+	const toggle = page.locator( '.nplus-toggle-secret[data-target="nplus_autologin_secret"]' );
+	await toggle.click();
+	await expect( field ).toHaveAttribute( 'type', 'text' );
+	await expect( toggle ).toHaveText( 'Hide' );
+	await toggle.click();
+	await expect( field ).toHaveAttribute( 'type', 'password' );
+
+	// Saving again without touching it keeps it; emptying it clears it.
+	await page.click( '#submit' );
+	await page.waitForURL( /settings-updated=true/ );
+	await expect( field ).toHaveValue( 'Ab%41<x>==' );
+	await field.fill( '' );
+	await page.click( '#submit' );
+	await page.waitForURL( /settings-updated=true/ );
+	await expect( field ).toHaveValue( '' );
+} );

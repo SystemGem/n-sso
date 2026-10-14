@@ -238,11 +238,10 @@ class Settings {
 
 		$out['api_base_url'] = isset( $input['api_base_url'] ) ? esc_url_raw( trim( $input['api_base_url'] ) ) : $current['api_base_url'];
 
-		// Secrets: keep the stored value when the field is submitted empty; allow explicit clearing.
+		// Secrets: the form is pre-filled with the saved value, so what is submitted is what is
+		// stored (an emptied field clears it). A field missing from the request keeps its value.
 		foreach ( self::SECRET_FIELDS as $field ) {
-			if ( ! empty( $input[ $field . '_clear' ] ) ) {
-				$out[ $field ] = '';
-			} elseif ( isset( $input[ $field ] ) && '' !== trim( $input[ $field ] ) ) {
+			if ( isset( $input[ $field ] ) ) {
 				// Not sanitize_text_field(): it would mangle secrets containing "%xx" or "<".
 				$out[ $field ] = trim( preg_replace( '/[\x00-\x1F\x7F]/', '', (string) $input[ $field ] ) );
 			}
@@ -364,7 +363,6 @@ class Settings {
 					);
 					foreach ( $secret_labels as $field => $label ) :
 						$locked = self::is_constant( $field );
-						$is_set = '' !== (string) self::get( $field );
 						?>
 						<tr>
 							<th scope="row"><label for="nplus_<?php echo esc_attr( $field ); ?>"><?php echo esc_html( $label[0] ); ?></label></th>
@@ -372,10 +370,8 @@ class Settings {
 								<?php if ( $locked ) : ?>
 									<code><?php echo esc_html( self::CONSTANTS[ $field ] ); ?></code> <?php esc_html_e( 'is defined in wp-config.php.', 'nplus-sso' ); ?>
 								<?php else : ?>
-									<input type="password" autocomplete="new-password" class="regular-text" id="nplus_<?php echo esc_attr( $field ); ?>" name="<?php echo esc_attr( $name ); ?>[<?php echo esc_attr( $field ); ?>]" value="" placeholder="<?php echo $is_set ? esc_attr__( '•••••••• (saved, leave empty to keep)', 'nplus-sso' ) : ''; ?>" />
-									<?php if ( $is_set ) : ?>
-										<label><input type="checkbox" name="<?php echo esc_attr( $name ); ?>[<?php echo esc_attr( $field ); ?>_clear]" value="1" /> <?php esc_html_e( 'Clear', 'nplus-sso' ); ?></label>
-									<?php endif; ?>
+									<input type="password" autocomplete="off" data-lpignore="true" data-1p-ignore spellcheck="false" class="regular-text code nplus-secret" id="nplus_<?php echo esc_attr( $field ); ?>" name="<?php echo esc_attr( $name ); ?>[<?php echo esc_attr( $field ); ?>]" value="<?php echo esc_attr( (string) self::get( $field ) ); ?>" />
+									<button type="button" class="button nplus-toggle-secret" data-target="nplus_<?php echo esc_attr( $field ); ?>" data-show="<?php esc_attr_e( 'Show', 'nplus-sso' ); ?>" data-hide="<?php esc_attr_e( 'Hide', 'nplus-sso' ); ?>"><?php esc_html_e( 'Show', 'nplus-sso' ); ?></button>
 								<?php endif; ?>
 								<?php if ( $label[1] ) : ?>
 									<p class="description"><?php echo esc_html( $label[1] ); ?></p>
@@ -384,6 +380,16 @@ class Settings {
 						</tr>
 					<?php endforeach; ?>
 				</table>
+				<script>
+				document.querySelectorAll( '.nplus-toggle-secret' ).forEach( function ( btn ) {
+					btn.addEventListener( 'click', function () {
+						var input = document.getElementById( btn.dataset.target );
+						var show  = 'password' === input.type;
+						input.type      = show ? 'text' : 'password';
+						btn.textContent = show ? btn.dataset.hide : btn.dataset.show;
+					} );
+				} );
+				</script>
 
 				<h2><?php esc_html_e( 'N+ platform', 'nplus-sso' ); ?></h2>
 				<p class="description"><?php esc_html_e( 'N+ staging (stagelms.nplus.global) uses the function names local_lms_apis_clone_create_user_site and local_lms_apis_clone_create_order. Confirm the production names with N+.', 'nplus-sso' ); ?></p>
