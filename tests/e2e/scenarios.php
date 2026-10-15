@@ -163,10 +163,14 @@ $bad = $client->auto_login( $uid + 999 );
 check( 'unknown N+ user is refused', is_wp_error( $bad ) );
 
 WP_CLI::log( 'Scenario: PDF redirect variant rejects tampered or expired links' );
+update_option( 'nplus_sso_settings', array_merge( get_option( 'nplus_sso_settings' ), array( 'autologin_signature' => 'prefixed' ) ) );
+$client = new Api_Client(); // The PDF GET /auto-login/ variant signs uid:timestamp.
 $good   = $client->auto_login_url( $uid );
 check( 'valid link accepted', 200 === wp_remote_retrieve_response_code( wp_remote_get( $good ) ) );
 check( 'other uid with same signature rejected', 403 === wp_remote_retrieve_response_code( wp_remote_get( str_replace( 'uid=' . $uid, 'uid=' . ( $uid + 1 ), $good ) ) ) );
 check( 'expired timestamp rejected', 403 === wp_remote_retrieve_response_code( wp_remote_get( $client->auto_login_url( $uid, time() - 3600 ) ) ) );
+
+update_option( 'nplus_sso_settings', array_merge( get_option( 'nplus_sso_settings' ), array( 'autologin_signature' => 'timestamp' ) ) );
 
 WP_CLI::log( 'Scenario: switching test mode off only clears test-mode data' );
 $real_order = $order; // Provisioned on (mock) real N+ above.

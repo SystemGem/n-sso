@@ -54,6 +54,7 @@ class Api_Client {
 				'api_key'             => (string) Settings::get( 'api_key' ),
 				'wstoken'             => (string) Settings::get( 'wstoken' ),
 				'autologin_wstoken'   => (string) Settings::get( 'autologin_wstoken' ),
+				'autologin_api_key'   => (string) Settings::get( 'autologin_api_key' ),
 				'secret'              => (string) Settings::get( 'secret' ),
 				'autologin_secret'    => Settings::autologin_secret(),
 				'version'             => (string) Settings::get( 'api_version' ),
@@ -73,6 +74,7 @@ class Api_Client {
 				'api_key'             => '',
 				'wstoken'             => '',
 				'autologin_wstoken'   => '',
+				'autologin_api_key'   => '',
 				'secret'              => '',
 				'autologin_secret'    => '',
 				'version'             => 'v1',
@@ -81,7 +83,7 @@ class Api_Client {
 				'fn_create_order'     => self::FN_CREATE_ORDER,
 				'fn_autologin'        => self::FN_AUTOLOGIN,
 				'signature_format'    => Signer::FORMAT_TIMESTAMP,
-				'autologin_signature' => Signer::FORMAT_PREFIXED,
+				'autologin_signature' => Signer::FORMAT_TIMESTAMP,
 				'autologin_mode'      => self::AUTOLOGIN_WS,
 				'sandbox'             => false,
 			),
@@ -98,6 +100,9 @@ class Api_Client {
 		}
 		if ( '' === (string) $this->config['autologin_wstoken'] ) {
 			$this->config['autologin_wstoken'] = $this->config['wstoken'];
+		}
+		if ( '' === (string) $this->config['autologin_api_key'] ) {
+			$this->config['autologin_api_key'] = $this->config['api_key'];
 		}
 	}
 
@@ -207,11 +212,13 @@ class Api_Client {
 			array(
 				'wsfunction' => $this->config['fn_autologin'],
 				'uid'        => $uid,
+				'cid'        => '', // Present (empty) in N+'s Postman collection.
 				'timestamp'  => $timestamp,
 				'signature'  => Signer::auto_login( $uid, $timestamp, $this->config['autologin_secret'], $this->config['autologin_signature'] ),
 			),
 			$this->config['autologin_wstoken'],
-			false
+			false,
+			$this->config['autologin_api_key']
 		);
 		if ( is_wp_error( $response ) ) {
 			return $response;
@@ -291,9 +298,20 @@ class Api_Client {
 		if ( ! empty( $this->config['sandbox'] ) && function_exists( 'home_url' ) && strtolower( (string) wp_parse_url( home_url(), PHP_URL_HOST ) ) === $host ) {
 			return true;
 		}
-		$labels = explode( '.', $base );
-		$domain = count( $labels ) > 2 ? implode( '.', array_slice( $labels, 1 ) ) : $base;
-		$ok     = substr( $host, -strlen( '.' . $domain ) ) === '.' . $domain || $host === $domain;
+		$labels  = explode( '.', $base );
+		$domains = array(
+			count( $labels ) > 2 ? implode( '.', array_slice( $labels, 1 ) ) : $base,
+			// N+ runs on both of its brand domains (learn.netcomplus.com appears in N+'s Postman collection).
+			'nplus.global',
+			'netcomplus.com',
+		);
+		$ok = false;
+		foreach ( $domains as $domain ) {
+			if ( $host === $domain || substr( $host, -strlen( '.' . $domain ) ) === '.' . $domain ) {
+				$ok = true;
+				break;
+			}
+		}
 
 		/**
 		 * Filter whether a login URL host is trusted as an N+ host.
@@ -344,8 +362,9 @@ class Api_Client {
 	 * @param bool                $require_success Require "status": "success" in the response.
 	 * @return array|WP_Error
 	 */
-	private function call( array $params, $wstoken = null, $require_success = true ) {
+	private function call( array $params, $wstoken = null, $require_success = true, $api_key = null ) {
 		$wstoken = null === $wstoken ? $this->config['wstoken'] : $wstoken;
+		$api_key = null === $api_key ? $this->config['api_key'] : $api_key;
 
 		if ( ! empty( $this->config['sandbox'] ) ) {
 			// Test mode: answered by the simulated N+ on this site, nothing leaves the server.
@@ -362,7 +381,7 @@ class Api_Client {
 			return $this->interpret( $data, $params['wsfunction'], $require_success );
 		}
 
-		if ( '' === $this->config['base_url'] || '' === (string) $wstoken || '' === $this->config['api_key'] ) {
+		if ( '' === $this->config['base_url'] || '' === (string) $wstoken || '' === (string) $api_key ) {
 			return new WP_Error( 'nplus_not_configured', __( 'N+ API credentials are not configured.', 'nplus-sso' ) );
 		}
 		if ( 0 !== strpos( $this->config['base_url'], 'https://' ) && ! apply_filters( 'nplus_sso_allow_insecure_http', false ) ) {
@@ -384,7 +403,7 @@ class Api_Client {
 			'redirection' => 0,
 			'user-agent'  => 'nplus-sso/' . ( defined( 'NPLUS_SSO_VERSION' ) ? NPLUS_SSO_VERSION : 'dev' ) . '; ' . ( function_exists( 'home_url' ) ? home_url() : '' ),
 			'headers'     => array(
-				'x-api-key'    => $this->config['api_key'],
+				'x-api-key'    => $api_key,
 				'Content-Type' => 'application/x-www-form-urlencoded',
 				'Accept'       => 'application/json',
 			),
@@ -520,6 +539,7 @@ class Api_Client {
 			'wstoken'           => $mask( $this->config['wstoken'], 4 ),
 			'secret'            => $mask( $this->config['secret'], 2 ),
 			'autologin_wstoken' => $this->config['autologin_wstoken'] === $this->config['wstoken'] ? 'same as wstoken' : $mask( $this->config['autologin_wstoken'], 4 ),
+			'autologin_api_key' => $this->config['autologin_api_key'] === $this->config['api_key'] ? 'same as x-api-key' : $mask( $this->config['autologin_api_key'], 2 ),
 			'functions'         => $this->config['fn_create_user'] . ', ' . $this->config['fn_create_order'] . ', ' . $this->config['fn_autologin'],
 			'signature'         => $this->config['signature_format'] . ' / auto login: ' . $this->config['autologin_signature'] . ' / mode: ' . $this->config['autologin_mode'],
 			'test mode'         => empty( $this->config['sandbox'] ) ? 'off (real N+)' : 'ON - simulated N+, nothing is sent to N+',

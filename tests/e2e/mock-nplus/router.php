@@ -14,7 +14,8 @@
  *
  * Signatures: Create User and Assign Subscription sign "{timestamp}" (as N+ staging
  * does; NPLUS_MOCK_SIGN=prefixed switches Create User to "email:timestamp" like the
- * PDF). Auto Login signs "{uid}:{timestamp}".
+ * PDF). The Auto Login web service also signs "{timestamp}" and has its own wstoken and
+ * x-api-key (as in N+'s Postman collection); the PDF GET /auto-login/ variant signs "{uid}:{timestamp}".
  *
  * Test helpers:
  *   GET  /__state          JSON dump of users, orders, logins, requests
@@ -28,6 +29,7 @@ $api_key  = getenv( 'NPLUS_MOCK_API_KEY' ) ?: 'test-api-key';
 $wstoken  = getenv( 'NPLUS_MOCK_WSTOKEN' ) ?: 'test-wstoken';
 $secret   = getenv( 'NPLUS_MOCK_SECRET' ) ?: 'test-secret';
 $al_token = getenv( 'NPLUS_MOCK_AUTOLOGIN_WSTOKEN' ) ?: 'test-autologin-wstoken';
+$al_key   = getenv( 'NPLUS_MOCK_AUTOLOGIN_API_KEY' ) ?: 'test-autologin-api-key';
 $sign     = getenv( 'NPLUS_MOCK_SIGN' ) ?: 'timestamp';
 $window   = 300; // Seconds a timestamp is accepted.
 $state_fn = getenv( 'NPLUS_MOCK_STATE' ) ?: sys_get_temp_dir() . '/nplus-mock-state.json';
@@ -88,7 +90,7 @@ if ( '/webservice/rest/server.php' === $path ) {
 	$state['requests'][] = array( 'fn' => $fn, 'params' => $log, 'time' => time() );
 	save_state( $state_fn, $state );
 
-	if ( ( $headers['x-api-key'] ?? '' ) !== $api_key ) {
+	if ( ( $headers['x-api-key'] ?? '' ) !== ( 'local_react_lms_apis_sso_autologin' === $fn ? $al_key : $api_key ) ) {
 		json_out( array( 'status' => 'error', 'message' => 'Invalid API key' ), 401 );
 	}
 	$expected_token = 'local_react_lms_apis_sso_autologin' === $fn ? $al_token : $wstoken;
@@ -176,7 +178,7 @@ if ( '/webservice/rest/server.php' === $path ) {
 		$ts  = (int) ( $p['timestamp'] ?? 0 );
 		$ok  = isset( $state['users'][ $uid ] )
 			&& abs( time() - $ts ) <= $window
-			&& hash_equals( hash_hmac( 'sha256', $uid . ':' . $ts, $secret ), (string) ( $p['signature'] ?? '' ) );
+			&& hash_equals( hash_hmac( 'sha256', (string) $ts, $secret ), (string) ( $p['signature'] ?? '' ) );
 		if ( ! $ok ) {
 			json_out( array( 'status' => 'error', 'message' => 'Invalid signature' ) );
 		}

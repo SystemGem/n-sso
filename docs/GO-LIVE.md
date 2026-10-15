@@ -14,6 +14,10 @@
 | `payment_status` example | `processing` |
 | Test campaign | `889904` (valid until 31 Oct 2026) |
 | Partner ID | `77` (the API key is this ID base64-encoded) |
+| Auto Login signature | **timestamp only** — in N+'s Postman collection (15 Oct) the Auto Login and Create User requests carry the identical signature for the identical timestamp |
+| Auto Login credentials | its **own x-api-key and wstoken** (Postman: different from the Create User ones) plus an optional `cid` field; settings "Auto Login API key" / "Auto Login web service token" |
+| N+ hosts | `stagelms.nplus.global` (staging), `learn.nplus.global`, and `learn.netcomplus.com` (Postman collection) |
+| Cloudflare | blocks our SiteGround server (34.174.37.99) with a JS challenge; requests from a normal office connection reach the API |
 
 All of these are settings or `wp-config.php` constants (see the README).
 
@@ -21,7 +25,7 @@ All of these are settings or `wp-config.php` constants (see the README).
 
 | # | Question | Plugin default until answered |
 |---|---|---|
-| 1 | **Auto Login token and signature.** Their Auto Login sample uses a *different* wstoken (`f9739…`), and its signature does not verify with the secret we were given, either as `uid:timestamp` or as timestamp only. Which wstoken and secret should we use for `local_react_lms_apis_sso_autologin`, and what is the string to sign? | main wstoken + main secret, signing `uid:timestamp` (as in the PDF and the comment in their sample code) |
+| 1 | **Auto Login credentials for partner 77.** Auto Login uses its own x-api-key and wstoken (Postman). Please send ours. | main API key + wstoken until provided; signing is timestamp only |
 | 2 | **Auto Login response.** Please send a sample success response. Which field holds the login URL? | the plugin looks for `loginurl`, `login_url`, `url`, `redirect_url`… (also inside `data`), and accepts only `*.nplus.global` HTTPS links |
 | 3 | Production base URL and production function names (are the `_clone_` names staging-only?) | `https://learn.nplus.global`, PDF names |
 | 4 | Accepted `payment_status` and `source` values | `completed`, `website` |
@@ -30,7 +34,7 @@ All of these are settings or `wp-config.php` constants (see the README).
 | 7 | Is `website_orderid` deduplicated, so a retry is safe? | we send a stable `{order}-{item}` |
 | 8 | How long is a `timestamp` valid? Are login links one-time? | N/A (we call at click time) |
 | 9 | Is there an API to cancel a subscription on refund? | manual, via N+ support |
-| 10 | Does our server IP need allow-listing? | N/A |
+| 10 | Allow-list our server IP 34.174.37.99 in Cloudflare (or skip the bot challenge for `/webservice/rest/server.php`) | blocking |
 
 ## Go-live steps
 

@@ -41,6 +41,7 @@ class Settings {
 		'secret'           => 'NPLUS_SSO_SECRET',
 		'autologin_secret'    => 'NPLUS_SSO_AUTOLOGIN_SECRET',
 		'autologin_wstoken'   => 'NPLUS_SSO_AUTOLOGIN_WSTOKEN',
+		'autologin_api_key'   => 'NPLUS_SSO_AUTOLOGIN_API_KEY',
 		'fn_create_user'      => 'NPLUS_SSO_FN_CREATE_USER',
 		'fn_create_order'     => 'NPLUS_SSO_FN_CREATE_ORDER',
 		'fn_autologin'        => 'NPLUS_SSO_FN_AUTOLOGIN',
@@ -54,7 +55,7 @@ class Settings {
 	 *
 	 * @var string[]
 	 */
-	const SECRET_FIELDS = array( 'api_key', 'wstoken', 'secret', 'autologin_secret', 'autologin_wstoken' );
+	const SECRET_FIELDS = array( 'api_key', 'wstoken', 'secret', 'autologin_secret', 'autologin_wstoken', 'autologin_api_key' );
 
 	/**
 	 * Defaults.
@@ -69,6 +70,7 @@ class Settings {
 			'secret'             => '',
 			'autologin_secret'   => '',
 			'autologin_wstoken'  => '',
+			'autologin_api_key'  => '',
 			// Function names: PDF documentation defaults. N+ staging uses local_lms_apis_clone_*.
 			'fn_create_user'     => 'local_lms_create_user_site',
 			'fn_create_order'    => 'local_lms_create_order',
@@ -77,8 +79,9 @@ class Settings {
 			'autologin_mode'      => 'ws',
 			// "timestamp" = sign the timestamp only (verified against N+ staging samples); "prefixed" = email:timestamp (PDF).
 			'signature_format'    => 'timestamp',
-			// Auto Login string to sign: "prefixed" = userid:timestamp (PDF + N+ sample code comment) or "timestamp".
-			'autologin_signature' => 'prefixed',
+			// Auto Login string to sign: "timestamp" (N+ Postman collection: same signature as Create User for
+			// the same timestamp) or "prefixed" = userid:timestamp (PDF).
+			'autologin_signature' => 'timestamp',
 			'api_version'        => 'v1',
 			'roleid'             => 5,
 			'source'             => 'website',
@@ -299,8 +302,8 @@ class Settings {
 				'prefixed'  => __( 'email:timestamp - PDF documentation', 'nplus-sso' ),
 			),
 			'autologin_signature' => array(
+				'timestamp' => __( 'Timestamp only - matches N+ Postman collection', 'nplus-sso' ),
 				'prefixed'  => __( 'userid:timestamp - PDF documentation', 'nplus-sso' ),
-				'timestamp' => __( 'Timestamp only', 'nplus-sso' ),
 			),
 		);
 	}
@@ -374,7 +377,8 @@ class Settings {
 						'wstoken'          => array( __( 'Web service token (wstoken)', 'nplus-sso' ), '' ),
 						'secret'           => array( __( 'HMAC secret', 'nplus-sso' ), __( 'The "SSO API Secret Key" from N+. Used to sign the N+ requests (see the signature settings below).', 'nplus-sso' ) ),
 						'autologin_secret' => array( __( 'Auto Login HMAC secret (optional)', 'nplus-sso' ), __( 'Only if N+ issued a different secret for Auto Login. Leave empty to reuse the HMAC secret.', 'nplus-sso' ) ),
-						'autologin_wstoken' => array( __( 'Auto Login web service token (optional)', 'nplus-sso' ), __( 'Only if N+ issued a separate wstoken for the Auto Login web service. Leave empty to reuse the web service token.', 'nplus-sso' ) ),
+						'autologin_wstoken' => array( __( 'Auto Login web service token (optional)', 'nplus-sso' ), __( 'N+ uses a separate wstoken for Auto Login (local_react_lms_apis_sso_autologin). Leave empty to reuse the web service token.', 'nplus-sso' ) ),
+						'autologin_api_key' => array( __( 'Auto Login API key (optional)', 'nplus-sso' ), __( 'N+ uses a separate x-api-key for Auto Login. Leave empty to reuse the API key.', 'nplus-sso' ) ),
 					);
 					foreach ( $secret_labels as $field => $label ) :
 						$locked = self::is_constant( $field );

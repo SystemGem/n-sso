@@ -239,33 +239,39 @@ class ApiClientTest extends TestCase {
 	}
 
 	public function test_auto_login_url_format() {
-		$url = $this->client()->auto_login_url( 81288, 1749360000 );
+		$url = $this->client( array( 'autologin_signature' => 'prefixed' ) )->auto_login_url( 81288, 1749360000 );
 		$sig = hash_hmac( 'sha256', '81288:1749360000', 'SECRET123' );
 		$this->assertSame( 'https://learn.nplus.global/auto-login/?uid=81288&timestamp=1749360000&signature=' . $sig, $url );
 	}
 
 	public function test_auto_login_web_service() {
 		$this->respond( 200, array( 'status' => 'success', 'data' => array( 'loginurl' => 'https://stage.nplus.global/sso?token=abc' ) ) );
-		$client = $this->client( array( 'base_url' => 'https://stagelms.nplus.global', 'autologin_wstoken' => 'ALTOKEN' ) );
+		$client = $this->client( array( 'base_url' => 'https://stagelms.nplus.global', 'autologin_wstoken' => 'ALTOKEN', 'autologin_api_key' => 'NzA=' ) );
 		$url    = $client->auto_login( 230428, 1769693436 );
 
 		$this->assertSame( 'https://stage.nplus.global/sso?token=abc', $url );
 		$req = $this->last_request();
 		$this->assertSame( 'https://stagelms.nplus.global/webservice/rest/server.php', $req['url'] );
-		$this->assertSame( 'KEY123', $req['args']['headers']['x-api-key'] );
+		$this->assertSame( 'NzA=', $req['args']['headers']['x-api-key'], 'Auto Login has its own x-api-key' );
 		$p = $req['parsed'];
 		$this->assertSame( 'local_react_lms_apis_sso_autologin', $p['wsfunction'] );
+		$this->assertArrayHasKey( 'cid', $p );
 		$this->assertSame( 'ALTOKEN', $p['wstoken'], 'Auto Login has its own wstoken' );
 		$this->assertSame( 'json', $p['moodlewsrestformat'] );
 		$this->assertSame( '230428', $p['uid'] );
 		$this->assertSame( '1769693436', $p['timestamp'] );
-		$this->assertSame( hash_hmac( 'sha256', '230428:1769693436', 'SECRET123' ), $p['signature'] );
+		// N+ Postman collection: Auto Login and Create User carry the same signature for the same timestamp.
+		$this->assertSame( hash_hmac( 'sha256', '1769693436', 'SECRET123' ), $p['signature'] );
 	}
 
 	public function test_auto_login_web_service_falls_back_to_main_token_and_accepts_plain_url() {
 		$this->respond( 200, array( 'url' => 'https://learn.nplus.global/x' ) );
 		$this->assertSame( 'https://learn.nplus.global/x', $this->client()->auto_login( 1, 1 ) );
 		$this->assertSame( 'TOKEN123', $this->last_request()['parsed']['wstoken'] );
+		$this->assertSame( 'KEY123', $this->last_request()['args']['headers']['x-api-key'] );
+
+		$this->respond( 200, array( 'status' => 'success', 'loginurl' => 'https://learn.netcomplus.com/sso?t=1' ) );
+		$this->assertSame( 'https://learn.netcomplus.com/sso?t=1', $this->client( array( 'base_url' => 'https://stagelms.nplus.global' ) )->auto_login( 1, 1 ) );
 	}
 
 	public function test_auto_login_rejects_foreign_or_missing_urls() {
@@ -291,7 +297,7 @@ class ApiClientTest extends TestCase {
 	}
 
 	public function test_auto_login_uses_dedicated_secret_when_set() {
-		$url = $this->client( array( 'autologin_secret' => 'OTHER' ) )->auto_login_url( 5, 10 );
+		$url = $this->client( array( 'autologin_secret' => 'OTHER', 'autologin_signature' => 'prefixed' ) )->auto_login_url( 5, 10 );
 		$this->assertStringEndsWith( 'signature=' . hash_hmac( 'sha256', '5:10', 'OTHER' ), $url );
 	}
 
