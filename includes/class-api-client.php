@@ -55,6 +55,7 @@ class Api_Client {
 				'wstoken'             => (string) Settings::get( 'wstoken' ),
 				'autologin_wstoken'   => (string) Settings::get( 'autologin_wstoken' ),
 				'autologin_api_key'   => (string) Settings::get( 'autologin_api_key' ),
+				'autologin_page_url'  => (string) Settings::get( 'autologin_page_url' ),
 				'secret'              => (string) Settings::get( 'secret' ),
 				'autologin_secret'    => Settings::autologin_secret(),
 				'version'             => (string) Settings::get( 'api_version' ),
@@ -75,6 +76,7 @@ class Api_Client {
 				'wstoken'             => '',
 				'autologin_wstoken'   => '',
 				'autologin_api_key'   => '',
+				'autologin_page_url'  => '',
 				'secret'              => '',
 				'autologin_secret'    => '',
 				'version'             => 'v1',
@@ -225,8 +227,16 @@ class Api_Client {
 		}
 
 		$url = $this->find_login_url( $response );
+		if ( ! $url && $this->is_success( $response ) && '' !== (string) $this->config['autologin_page_url'] ) {
+			// N+ confirmed the learner but returned no link (its web service only validates). The browser
+			// signs in on N+'s Auto Login page, which receives the same uid/timestamp/signature (PDF §5).
+			return $this->auto_login_url( $uid, $timestamp );
+		}
 		if ( ! $url ) {
 			Logger::error( 'N+ auto login returned no usable URL', $response );
+			if ( $this->is_success( $response ) ) {
+				return new WP_Error( 'nplus_no_login_url', __( 'N+ confirmed the auto login but returned no login link. Set "Auto Login page URL" in the N+ SSO settings (ask N+ which page the learner\'s browser should open).', 'nplus-sso' ), array( 'response' => $response ) );
+			}
 			$message = isset( $response['message'] ) && is_string( $response['message'] ) ? $response['message'] : __( 'N+ did not return a login link.', 'nplus-sso' );
 			return new WP_Error( 'nplus_no_login_url', $message, array( 'response' => $response ) );
 		}
@@ -332,8 +342,9 @@ class Api_Client {
 	public function auto_login_url( $nplus_user_id, $timestamp = null ) {
 		$timestamp = null === $timestamp ? time() : (int) $timestamp;
 		$uid       = (int) $nplus_user_id;
+		$page      = '' !== (string) $this->config['autologin_page_url'] ? (string) $this->config['autologin_page_url'] : $this->config['base_url'] . self::AUTO_LOGIN_PATH;
 
-		return $this->config['base_url'] . self::AUTO_LOGIN_PATH . '?' . http_build_query(
+		return $page . ( false === strpos( $page, '?' ) ? '?' : '&' ) . http_build_query(
 			array(
 				'uid'       => $uid,
 				'timestamp' => $timestamp,
@@ -343,6 +354,17 @@ class Api_Client {
 			'&',
 			PHP_QUERY_RFC3986
 		);
+	}
+
+	/**
+	 * Whether a decoded N+ response reports success.
+	 *
+	 * @param array $response Response.
+	 * @return bool
+	 */
+	private function is_success( array $response ) {
+		$status = isset( $response['status'] ) ? $response['status'] : null;
+		return true === $status || 'success' === strtolower( (string) $status );
 	}
 
 	/**

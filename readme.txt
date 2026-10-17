@@ -4,7 +4,7 @@ Tags: woocommerce, sso, lms, moodle, learning
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.3.1
+Stable tag: 1.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -27,6 +27,9 @@ Background processing with automatic retries, an order meta box, order notes, re
 3. Edit a product > Product data > N+ Learning: tick "Grant N+ access" and enter the N+ Campaign ID and Subscription SKU.
 
 == Changelog ==
+
+= 1.4.0 =
+* Auto Login: when N+ confirms the learner but returns no link (as learn.netcomplus.com does), send the browser to the N+ Auto Login page with uid/timestamp/signature. New "Auto Login page URL" setting.
 
 = 1.3.1 =
 * Connection test shows the Auto Login link N+ returns.

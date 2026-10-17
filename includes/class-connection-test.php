@@ -163,7 +163,7 @@ class Connection_Test {
 		}
 
 		$login             = $client->auto_login( $uid );
-		$result['steps'][] = self::step( __( '3. Auto Login', 'nplus-sso' ), ! is_wp_error( $login ), is_wp_error( $login ) ? $login : __( 'Login link received:', 'nplus-sso' ) . "\n" . $login );
+		$result['steps'][] = self::step( __( '3. Auto Login', 'nplus-sso' ), ! is_wp_error( $login ), is_wp_error( $login ) ? $login : __( 'Learner\'s browser will open:', 'nplus-sso' ) . "\n" . $login );
 		if ( ! is_wp_error( $login ) ) {
 			$result['login_url'] = $login;
 		}

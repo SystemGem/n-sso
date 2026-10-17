@@ -42,6 +42,7 @@ class Settings {
 		'autologin_secret'    => 'NPLUS_SSO_AUTOLOGIN_SECRET',
 		'autologin_wstoken'   => 'NPLUS_SSO_AUTOLOGIN_WSTOKEN',
 		'autologin_api_key'   => 'NPLUS_SSO_AUTOLOGIN_API_KEY',
+		'autologin_page_url'  => 'NPLUS_SSO_AUTOLOGIN_PAGE_URL',
 		'fn_create_user'      => 'NPLUS_SSO_FN_CREATE_USER',
 		'fn_create_order'     => 'NPLUS_SSO_FN_CREATE_ORDER',
 		'fn_autologin'        => 'NPLUS_SSO_FN_AUTOLOGIN',
@@ -71,6 +72,9 @@ class Settings {
 			'autologin_secret'   => '',
 			'autologin_wstoken'  => '',
 			'autologin_api_key'  => '',
+			// N+ page the learner's browser opens with uid/timestamp/signature (PDF §5). Used when the
+			// Auto Login web service confirms the learner but returns no link, and by the "redirect" method.
+			'autologin_page_url' => 'https://learn.nplus.global/auto-login/',
 			// Function names: PDF documentation defaults. N+ staging uses local_lms_apis_clone_*.
 			'fn_create_user'     => 'local_lms_create_user_site',
 			'fn_create_order'    => 'local_lms_create_order',
@@ -251,6 +255,10 @@ class Settings {
 			}
 		}
 
+		if ( isset( $input['autologin_page_url'] ) ) {
+			$out['autologin_page_url'] = esc_url_raw( trim( $input['autologin_page_url'] ) );
+		}
+
 		foreach ( array( 'fn_create_user', 'fn_create_order', 'fn_autologin' ) as $fn ) {
 			if ( isset( $input[ $fn ] ) && '' !== trim( $input[ $fn ] ) ) {
 				$out[ $fn ] = preg_replace( '/[^a-z0-9_]/', '', strtolower( $input[ $fn ] ) );
@@ -426,6 +434,13 @@ class Settings {
 							<td><input type="text" class="regular-text code" id="nplus_<?php echo esc_attr( $field ); ?>" name="<?php echo esc_attr( $name ); ?>[<?php echo esc_attr( $field ); ?>]" value="<?php echo esc_attr( self::get( $field ) ); ?>" <?php disabled( self::is_constant( $field ) ); ?> /></td>
 						</tr>
 					<?php endforeach; ?>
+					<tr>
+						<th scope="row"><label for="nplus_autologin_page_url"><?php esc_html_e( 'Auto Login page URL', 'nplus-sso' ); ?></label></th>
+						<td>
+							<input type="url" class="regular-text code" id="nplus_autologin_page_url" name="<?php echo esc_attr( $name ); ?>[autologin_page_url]" value="<?php echo esc_attr( self::get( 'autologin_page_url' ) ); ?>" <?php disabled( self::is_constant( 'autologin_page_url' ) ); ?> />
+							<p class="description"><?php esc_html_e( 'The N+ page the learner\'s browser opens to be signed in (?uid=&timestamp=&signature= is added). Used when the Auto Login web service confirms the learner but returns no link.', 'nplus-sso' ); ?></p>
+						</td>
+					</tr>
 					<?php
 					$selects = array(
 						'autologin_mode'      => __( 'Auto Login method', 'nplus-sso' ),

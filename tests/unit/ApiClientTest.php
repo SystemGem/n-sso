@@ -288,6 +288,22 @@ class ApiClientTest extends TestCase {
 		$this->assertSame( 'Invalid signature', $this->client()->auto_login( 1, 1 )->get_error_message() );
 	}
 
+	public function test_auto_login_success_without_link_uses_nplus_auto_login_page() {
+		// Real reply from learn.netcomplus.com on 17 Oct: success, learner details, no link.
+		$this->respond( 200, array( 'status' => 'success', 'code' => 200, 'message' => 'User autologin successful', 'data' => array( 'userid' => 246702, 'username' => 'x@yopmail.com', 'domain' => false ) ) );
+		$url = $this->client( array( 'autologin_page_url' => 'https://learn.nplus.global/auto-login/' ) )->auto_login( 246702, 1792243890 );
+		$this->assertSame( 'https://learn.nplus.global/auto-login/?uid=246702&timestamp=1792243890&signature=' . hash_hmac( 'sha256', '1792243890', 'SECRET123' ), $url );
+
+		// Without a page URL the admin gets a clear instruction instead of a silent failure.
+		$err = $this->client()->auto_login( 246702, 1792243890 );
+		$this->assertSame( 'nplus_no_login_url', $err->get_error_code() );
+		$this->assertStringContainsString( 'Auto Login page URL', $err->get_error_message() );
+
+		// A failed web service call never falls back to the page.
+		$this->respond( 200, array( 'status' => 'error', 'message' => 'Invalid signature' ) );
+		$this->assertSame( 'Invalid signature', $this->client( array( 'autologin_page_url' => 'https://learn.nplus.global/auto-login/' ) )->auto_login( 1, 1 )->get_error_message() );
+	}
+
 	public function test_auto_login_redirect_mode_per_pdf() {
 		$GLOBALS['nplus_test_http'] = function () {
 			$this->fail( 'redirect mode must not call the API' );
