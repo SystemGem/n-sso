@@ -7,7 +7,7 @@
 | Base URL | `https://learn.netcomplus.com` (no Cloudflare challenge for our server) |
 | x-api-key | `NzM=` (partner 73) for all three calls |
 | Create User / Assign Subscription | main wstoken + `local_lms_apis_clone_create_user_site` / `local_lms_apis_clone_create_order` |
-| Auto Login | its own wstoken (setting "Auto Login web service token"), same x-api-key, `cid` empty. Verified 17 Oct: returns `{"status":"success","message":"User autologin successful","data":{userid,…,"domain":false}}` — **no login link**, so the browser is sent to the "Auto Login page URL" (default `https://learn.nplus.global/auto-login/?uid=&timestamp=&signature=`, PDF §5). Confirm this page with N+. |
+| Auto Login | its own wstoken (setting "Auto Login web service token"), same x-api-key, `cid` empty. Verified 17 Oct: returns `{"status":"success","message":"User autologin successful","data":{userid,…,"domain":false}}` — **no login link**, so the browser is sent to the "Auto Login page URL" (default `https://learn.nplus.global/auto-login/?uid=&timestamp=&signature=`, PDF §5). **Verified 17 Oct: the browser landed on learn.nplus.global/dashboard signed in as the test learner.** |
 | Test campaigns | `846109` (alternative `528808`), SKU `10877` |
 | Signature | HMAC-SHA256 of the timestamp with the SSO secret, for all three calls (verified 17 Oct from our server: user 246702 created, subscription 194922 assigned, autologin successful) |
 
