@@ -1,6 +1,17 @@
 # Go-live checklist
 
-## What N+ has confirmed (staging credentials email)
+## Current N+ setup (Hrishikesh, 16 Oct 2026)
+
+| Item | Value |
+|---|---|
+| Base URL | `https://learn.netcomplus.com` (no Cloudflare challenge for our server) |
+| x-api-key | `NzM=` (partner 73) for all three calls |
+| Create User / Assign Subscription | main wstoken + `local_lms_apis_clone_create_user_site` / `local_lms_apis_clone_create_order` |
+| Auto Login | its own wstoken (setting "Auto Login web service token"), same x-api-key, `cid` empty |
+| Test campaigns | `846109` (alternative `528808`), SKU `10877` |
+| Signature | HMAC-SHA256 of the timestamp with the SSO secret (verified: Create User succeeded from our server on 15 Oct, N+ user 246367) |
+
+## What N+ confirmed earlier (staging credentials email)
 
 | Item | Value |
 |---|---|
